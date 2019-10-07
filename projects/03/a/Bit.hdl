@@ -14,5 +14,6 @@ CHIP Bit {
     OUT out;
 
     PARTS:
-    // Put your code here:
+    Mux(a=prevout, b=in, sel=load, out=state);
+    DFF(in=state, out=out, out=prevout); // outputs what was previously put in to it, "has memory"
 }
