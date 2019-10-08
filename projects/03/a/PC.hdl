@@ -16,20 +16,27 @@ CHIP PC {
     OUT out[16];
 
     PARTS:
-    Register(in=in, load=load, out=loaded);
-    Inc16(in=loaded, out=incremented);
-    Not16(in=true, out=zero);
+    Not16(in=true, out=zero); // set up zero for output
+
+    // choose current count based on load
+    Mux16(a=prevcount, b=in, sel=load, out=count);
+    Inc16(in=count, out=inccount); // set up increment for output
+
+    // 3 way if statement, bits are "inc, load, reset"
     Mux8Way16(
-        a=zero, // prev
-        b=zero,
-        c=in, // in
-        d=zero,
-        e=incremented,
-        f=zero,
-        g=in, // in
-        h=zero,
+        a=prevcount, // 000, out emits prev count
+        b=zero, // 001, reset, out emits zero
+        c=in, // 010, load, out emits input
+        d=zero, // 011, reset, out emits zero
+        e=inccount, // 100, inc, out emits input
+        f=zero, // 101, reset, out emits zero
+        g=in, // 110, load, out emits input
+        h=zero, // 111, reset, out emits zero
         sel[0]=reset,
         sel[1]=load,
         sel[2]=inc,
-        out=out);
+        out=temp);
+
+    // give sense of time 
+    Register(in=temp, load=true, out=out, out=prevcount);
 }
