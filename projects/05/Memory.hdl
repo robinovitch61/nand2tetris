@@ -27,5 +27,28 @@ CHIP Memory {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    // allocate load bit
+    DMux(
+        in=load,
+        sel=address[14],
+        a=dataLoad, // 0... - data
+        b=screenLoad // 1...>=16384 - screen
+    );
+
+    // modify memory spaces and get out values
+    RAM16K(in=in, load=dataLoad, address[0..13]=address[0..13], out=dataOut);
+    // screenAddr = address + (-16384) using 2's complement
+    Add16(a[0..14]=address[0..14], b[14..15]=true, out[0..12]=screenAddr);
+    Screen(in=in, load=screenLoad, address[0..12]=screenAddr, out=screenOut);
+    Keyboard(out=kbdOut);
+    
+    // assign correct out value
+    Mux4Way16(
+        a=dataOut, // 00... - data
+        b=dataOut, // 01... - data
+        c=screenOut, // 10...>=16384 - screen
+        d=kbdOut, // 11...>=24576 - keyboard
+        sel=address[13..14],
+        out=out
+    );
 }
