@@ -39,5 +39,68 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // Break up instruction bit for readability
+    And16(
+        a[0..15]=true,
+        b=instruction,
+        out[0..2]=jmp,
+        out[3]=storeInM,
+        out[4]=storeInD,
+        out[5]=storeInA,
+        out[6]=no,
+        out[7]=f,
+        out[8]=ny,
+        out[9]=zy,
+        out[10]=nx,
+        out[11]=zx,
+        out[12]=AMSelector,
+        out[15]=isCInstruction // all these control bits only matter if C instruction, otherwise loads 15 bits into A
+    );
+    Not(in=isCInstruction, out=isAInstruction);
+
+    // Write to M=RAM[A] when a C instruction asserts storeInM
+    And(a=storeInM, b=isCInstruction, out=writeM);
+
+    //// D Register: load alu output in to D when C instruction asserts storeInD
+    And(a=storeInD, b=isCInstruction, out=DLoad);
+    DRegister(in=aluOut, load=DLoad, out=D);
+
+    //// A Register: load value in to A when (A instruction) or (C instruction asserts storeInA)
+    Or(a=isAInstruction, b=storeInA, out=ALoad);
+    Mux16(a=instruction, b=aluOut, sel=isCInstruction, out=AInput);
+    ARegister(in=AInput, load=ALoad, out=A, out[0..14]=addressM);
+
+    //// ALU
+    Mux16(a=A, b=inM, sel=AMSelector, out=AorM);
+    ALU(
+        x=D,
+        y=AorM,
+        zx=zx, nx=nx, zy=zy, ny=ny, f=f, no=no,
+        out=aluOut,
+        out=outM,
+        zr=isZero,
+        ng=isNeg
+    );
+
+    //// PC
+    Not(in=isZero, out=isNonZero);
+    Not(in=isNeg, out=isPos);
+    And(a=isNonZero, b=isPos, out=JGT);
+    Or(a=isZero, b=isPos, out=JGE);
+    Or(a=isZero, b=isNeg, out=JLE);
+    Mux8Way16( // use like Mux8Way1
+        a=false, // 000, no jump, null
+        b[0]=JGT, // 001, out>0 jump, JGT
+        c[0]=isZero, // 010, out=0 jump, JEQ
+        d[0]=JGE, // 011, out>=0 jump, JGE
+        e[0]=isNeg, // 100, out<0 jump, JLT
+        f[0]=isNonZero, // 101, out!=0 jump, JNE
+        g[0]=JLE, // 110, out<=0 jump, JLE
+        h=true, // 111, jump, JMP
+        sel=jmp,
+        out[0]=maybeJump
+    );
+    // if C Instruction and jmp bits confirm possible jump, jump
+    And(a=maybeJump, b=isCInstruction, out=jumpConfirmed);
+    PC(in=A, load=jumpConfirmed, inc=true, reset=reset, out[0..14]=pc);
 }
