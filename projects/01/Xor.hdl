@@ -17,3 +17,17 @@ CHIP Xor {
     Or(a=a, b=b, out=aORb);
     And(a=aNANDb, b=aORb, out=out);
 }
+
+/// Nand
+// a   b   out
+// 0   0   1
+// 0   1   1
+// 1   0   1
+// 1   1   0
+
+/// Or
+// a   b   out
+// 0   0   0
+// 0   1   1
+// 1   0   1
+// 1   1   1

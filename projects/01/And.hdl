@@ -17,3 +17,15 @@ CHIP And {
     Nand(a=a, b=b, out=temp);
     Not(in=temp, out=out);
 }
+
+// Nand:
+// a   b   out
+// 0   0   1
+// 0   1   1
+// 1   0   1
+// 1   1   0
+
+// Not:
+// in  out
+// 0   1
+// 1   0

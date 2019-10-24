@@ -16,6 +16,12 @@ CHIP Or {
     PARTS:
     Not(in=a, out=na);
     Not(in=b, out=nb);
-    And(a=na, b=nb, out=temp);
-    Not(in=temp, out=out);
+    Nand(a=na, b=nb, out=out);
 }
+
+/// Nand
+// a   b   out
+// 0   0   1
+// 0   1   1
+// 1   0   1
+// 1   1   0
