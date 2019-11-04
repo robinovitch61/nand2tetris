@@ -35,11 +35,6 @@ fn get_file_contents(path: &Path) -> String { // takes reference to str, "read o
     contents // returns contents
 }
 
-#[test]
-fn test_get_file_contents() {
-    assert_eq!("testing\ntesting2", get_file_contents("test.txt"));
-}
-
 
 /// Returns a raw line after removing comments and white space
 /// 
@@ -60,7 +55,7 @@ fn remove_comments(line: &str) -> &str {
 }
 
 #[test]
-fn test_comment_free() {
+fn test_stripped_line() {
     assert_eq!("", remove_comments(""));
     assert_eq!("", remove_comments("    "));
     assert_eq!("", remove_comments("//   "));
@@ -120,6 +115,24 @@ fn test_get_symbol_a_command() {
     let result = std::panic::catch_unwind(|| get_symbol_a_command("@1test"));
     assert!(result.is_err());
 }
+
+
+/// INSERT DOCS HERE
+fn contains_symbol(stripped_line: &str) -> bool {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^@([^\d][a-zA-Z0-9_\.$:]*)\s*(\S*)"
+            ).unwrap();
+    };
+
+    match RE.captures(stripped_line) {
+        Some(_) => true,
+        _ => false
+    }
+}
+
+/// INSERT TEST HERE
+
 
 /// INSERT DOCS HERE
 fn get_symbol_l_command(command: &str) -> &str {
@@ -240,34 +253,34 @@ fn main() {
     dest_map.insert("AMD", "111".to_string());
 
     let mut comp_map: HashMap<&str, String> = HashMap::new();
-    comp_map.insert("0",   "101010".to_string());
-    comp_map.insert("1",   "111111".to_string());
-    comp_map.insert("-1",  "111010".to_string());
-    comp_map.insert("D",   "001100".to_string());
-    comp_map.insert("A",   "110000".to_string());
-    comp_map.insert("M",   "110000".to_string());
-    comp_map.insert("!D",  "001101".to_string());
-    comp_map.insert("!A",  "110001".to_string());
-    comp_map.insert("!M",  "110001".to_string());
-    comp_map.insert("-D",  "001111".to_string());
-    comp_map.insert("-A",  "110011".to_string());
-    comp_map.insert("-M",  "110011".to_string());
-    comp_map.insert("D+1", "011111".to_string());
-    comp_map.insert("A+1", "110111".to_string());
-    comp_map.insert("M+1", "110111".to_string());
-    comp_map.insert("D-1", "001110".to_string());
-    comp_map.insert("A-1", "110010".to_string());
-    comp_map.insert("M-1", "110010".to_string());
-    comp_map.insert("D+A", "000010".to_string());
-    comp_map.insert("D+M", "000010".to_string());
-    comp_map.insert("D-A", "010011".to_string());
-    comp_map.insert("D-M", "010011".to_string());
-    comp_map.insert("A-D", "000111".to_string());
-    comp_map.insert("M-D", "000111".to_string());
-    comp_map.insert("D&A", "000000".to_string());
-    comp_map.insert("D&M", "000000".to_string());
-    comp_map.insert("D|A", "010101".to_string());
-    comp_map.insert("D|M", "010101".to_string());
+    comp_map.insert("0",   "0101010".to_string());
+    comp_map.insert("1",   "0111111".to_string());
+    comp_map.insert("-1",  "0111010".to_string());
+    comp_map.insert("D",   "0001100".to_string());
+    comp_map.insert("A",   "0110000".to_string());
+    comp_map.insert("M",   "1110000".to_string());
+    comp_map.insert("!D",  "0001101".to_string());
+    comp_map.insert("!A",  "0110001".to_string());
+    comp_map.insert("!M",  "1110001".to_string());
+    comp_map.insert("-D",  "0001111".to_string());
+    comp_map.insert("-A",  "0110011".to_string());
+    comp_map.insert("-M",  "1110011".to_string());
+    comp_map.insert("D+1", "0011111".to_string());
+    comp_map.insert("A+1", "0110111".to_string());
+    comp_map.insert("M+1", "1110111".to_string());
+    comp_map.insert("D-1", "0001110".to_string());
+    comp_map.insert("A-1", "0110010".to_string());
+    comp_map.insert("M-1", "1110010".to_string());
+    comp_map.insert("D+A", "0000010".to_string());
+    comp_map.insert("D+M", "1000010".to_string());
+    comp_map.insert("D-A", "0010011".to_string());
+    comp_map.insert("D-M", "1010011".to_string());
+    comp_map.insert("A-D", "0000111".to_string());
+    comp_map.insert("M-D", "1000111".to_string());
+    comp_map.insert("D&A", "0000000".to_string());
+    comp_map.insert("D&M", "1000000".to_string());
+    comp_map.insert("D|A", "0010101".to_string());
+    comp_map.insert("D|M", "1010101".to_string());
 
     let mut jump_map: HashMap<&str, String> = HashMap::new();
     jump_map.insert("",    "000".to_string());
@@ -327,16 +340,16 @@ fn main() {
     for line in file_contents.lines() {
 
         // strip comments
-        let comment_free = remove_comments(&line);
-        if comment_free == "" { continue };
+        let stripped_line = remove_comments(&line);
+        if stripped_line == "" { continue };
 
         line_count += 1;
         
         // get command type of line
-        let command_type = get_command_type(comment_free);
+        let command_type = get_command_type(stripped_line);
 
         if let CommandType::L = command_type { // this is a condensed match
-            let symbol = get_symbol_l_command(comment_free);
+            let symbol = get_symbol_l_command(stripped_line);
 
             match symbol_map.get(&symbol) {
                 Some(_) => { continue },
@@ -352,45 +365,43 @@ fn main() {
     let mut var_count = 16;
     for line in file_contents.lines() {
 
-        // println!("Line {}: '{}'", ii, line);
+        let stripped_line = remove_comments(&line);
+        if stripped_line == "" { continue };
         
-        let comment_free = remove_comments(&line);
-        // println!("Uncommented: '{}'", comment_free);
-        if comment_free == "" { continue };
-        
-        let command_type = get_command_type(comment_free);
-        // println!("Type: '{:?}'", command_type);
+        let command_type = get_command_type(stripped_line);
 
-        let symbol = match command_type {
+        let parsed_line = match command_type {
             CommandType::A => {
-                let symbol = get_symbol_a_command(comment_free);
+                if contains_symbol(stripped_line) {
+                    let symbol = get_symbol_a_command(stripped_line);
 
-                // put var number in symbol table if not already
-                match symbol_map.get(&symbol) {
-                    Some(_) => {}, // do nothing if already in table
-                    _ => { // if symbol not already in table
-                        symbol_map.insert(&symbol, var_count.to_string());
-                        var_count += 1; // increment variables declared
+                    // put var number in symbol table if not already
+                    match symbol_map.get(&symbol) {
+                        Some(_) => {}, // do nothing if already in table
+                        _ => { // if symbol not already in table
+                            symbol_map.insert(&symbol, var_count.to_string());
+                            var_count += 1; // increment variables declared
+                        }
+                    }
+                    
+                    // replace symbol with number in line if necessary
+                    match symbol {
+                        "" => stripped_line.to_string(),
+                        _ => stripped_line.replace(symbol, symbol_map.get(&symbol).unwrap())
                     }
                 }
-                symbol
+                else {
+                    stripped_line.to_string()
+                }
             }
             CommandType::L => {
                 continue // no bits for L commands
             }
             CommandType::C => {
-                ""
+                stripped_line.to_string()
             }
         };
 
-        // replace symbol with number in line if necessary
-        let parsed_line = match symbol {
-            "" => comment_free.to_string(),
-            _ => comment_free.replace(symbol, symbol_map.get(&symbol).unwrap())
-        };
-
-        // println!("Parsed line: {}", parsed_line);
-        
         // create bit line based on parsed
         let bits = match command_type {
             CommandType::A => {
@@ -404,7 +415,6 @@ fn main() {
             }
         };
 
-        // println!("{}", bits);
         write_to_file(&output_file, bits);
     }
 }
