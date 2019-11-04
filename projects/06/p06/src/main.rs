@@ -1,5 +1,6 @@
 
 use std::fs::File;
+use std::path::Path;
 use std::io::BufReader;
 use std::io::prelude::*;
 use std::env;
@@ -10,7 +11,7 @@ use regex::Regex;
 extern crate lazy_static;
 
 // create an enum type called CommandType
-// that implements the Debug trait
+// that implements the Debug, etc. traits
 //     (printing with {:?} tells type)
 #[derive(PartialEq, Eq, Debug)]
 enum CommandType {
@@ -19,16 +20,14 @@ enum CommandType {
     C
 }
 
-/// Constructor/initializer
-/// 
 /// Returns a String of the file contents at path
 /// Note: path is referenced from the root directory of the project
 /// 
 /// # Arguments
 /// 
 /// * `path` - A string slice that holds the file path
-fn get_file_contents(path: &str) -> String { // takes reference to str, "read only"
-    let file = File::open(&path).expect("Failed to open file");
+fn get_file_contents(path: &Path) -> String { // takes reference to str, "read only"
+    let file = File::open(path).expect("Failed to open file");
     let mut buf_reader = BufReader::new(file); // buffer reader for file
     let mut contents = String::new(); // mutable string variable for contents
     buf_reader.read_to_string(&mut contents) // mutable reference to contents
@@ -61,7 +60,7 @@ fn remove_comments(line: &str) -> &str {
 }
 
 #[test]
-fn test_raw_line() {
+fn test_comment_free() {
     assert_eq!("", remove_comments(""));
     assert_eq!("", remove_comments("    "));
     assert_eq!("", remove_comments("//   "));
@@ -70,8 +69,6 @@ fn test_raw_line() {
 }
 
 
-/// commandType
-/// 
 /// Returns a string slice that indicates command type
 /// 
 /// # Arguments
@@ -95,7 +92,7 @@ fn test_get_command_type() {
     assert_eq!(CommandType::C, get_command_type("0;JMP"));
 }
 
-
+/// INSERT DOCS HERE
 fn get_symbol_a_command(command: &str) -> &str {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -124,7 +121,7 @@ fn test_get_symbol_a_command() {
     assert!(result.is_err());
 }
 
-
+/// INSERT DOCS HERE
 fn get_symbol_l_command(command: &str) -> &str {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -154,6 +151,7 @@ fn test_get_symbol_l_command() {
 }
 
 
+/// INSERT DOCS HERE
 fn get_c_command_mnemonics(command: &str) -> (&str, &str, &str) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -183,54 +181,129 @@ fn test_get_c_command_mnemonics() {
     assert_eq!(("", "0", "JMP"), get_c_command_mnemonics("0;JMP"));
 }
 
-// fn convert_to_bits(raw_line: &str) -> &str {
+/// INSERT DOCS HERE
+fn get_a_bits(command: &str) -> String {
+    match command.replace("@", "").parse::<i32>() {
+        Ok(num) => format!("{:#018b}", num).to_string().replace("0b", ""),
+        Err(e) => {
+            panic!("Problem parsing number {:?} to string from line {:?}", e, command)
+        },
+    }
+}
 
-//     let symbol = get_symbol(raw_line);
+/// INSERT TEST HERE
 
-//     // get dest, comp, and jump mnemonics if C command
-//     if symbol == "" { // proxy for "if C command"
-//         let (dest, comp, jump) = get_c_command_mnemonics(raw_line);
-//         println!("dest mnemonic: {}", dest);
-//         println!("comp mnemonic: {}", comp);
-//         println!("jump mnemonic: {}", jump);
-//         let bits = mnemonics_to_bits(dest, comp, jump);
 
-//     } else {
-//         let bits = symbol_to_bits(symbol);
-//     }
+/// INSERT DOCS HERE
+fn get_c_bits(
+    command: &str,
+    comp_map: &HashMap<&str, String>,
+    dest_map: &HashMap<&str, String>,
+    jump_map: &HashMap<&str, String>) -> String {
+    
+    let (dest, comp, jump) = get_c_command_mnemonics(command);
+    let comp_bits = comp_map.get(&comp).expect("No mapping found for comp mnemonic");
+    let dest_bits = dest_map.get(&dest).expect("No mapping found for dest mnemonic");
+    let jump_bits = jump_map.get(&jump).expect("No mapping found for jump mnemonic");
 
-//     println!("\n");
+    let bits = "111".to_string();
+    bits + comp_bits + dest_bits + jump_bits
+}
 
-//     "BITS"
-// }
+/// INSERT TEST HERE
+
+
+/// INSERT DOCS HERE
+fn create_file(path: &Path) -> File {
+    File::create(&path).unwrap()
+}
+
+
+/// INSERT DOCS HERE
+fn write_to_file(mut file: &File, line: String) {
+    // Write the `LOREM_IPSUM` string to `file`, returns `io::Result<()>`
+    file.write_all(format!("{}\n", line).as_bytes()).expect("Failed to write line to file!");
+}
+
 
 fn main() {
 
-    // define initial hashmap of builtins
-    let mut symbol_table: HashMap<&str, String> = HashMap::new();
-    symbol_table.insert("SP", "0".to_string());
-    symbol_table.insert("LCL", "1".to_string());
-    symbol_table.insert("ARG", "2".to_string());
-    symbol_table.insert("THIS", "3".to_string());
-    symbol_table.insert("THAT", "4".to_string());
-    symbol_table.insert("R0", "0".to_string());
-    symbol_table.insert("R1", "1".to_string());
-    symbol_table.insert("R2", "2".to_string());
-    symbol_table.insert("R3", "3".to_string());
-    symbol_table.insert("R4", "4".to_string());
-    symbol_table.insert("R5", "5".to_string());
-    symbol_table.insert("R6", "6".to_string());
-    symbol_table.insert("R7", "7".to_string());
-    symbol_table.insert("R8", "8".to_string());
-    symbol_table.insert("R9", "9".to_string());
-    symbol_table.insert("R10", "10".to_string());
-    symbol_table.insert("R11", "11".to_string());
-    symbol_table.insert("R12", "12".to_string());
-    symbol_table.insert("R13", "13".to_string());
-    symbol_table.insert("R14", "14".to_string());
-    symbol_table.insert("R15", "15".to_string());
-    symbol_table.insert("SCREEN", "16384".to_string());
-    symbol_table.insert("KBD", "24576".to_string());
+    // define C command hashmaps
+    let mut dest_map: HashMap<&str, String> = HashMap::new();
+    dest_map.insert("",    "000".to_string());
+    dest_map.insert("M",   "001".to_string());
+    dest_map.insert("D",   "010".to_string());
+    dest_map.insert("MD",  "011".to_string());
+    dest_map.insert("A",   "100".to_string());
+    dest_map.insert("AM",  "101".to_string());
+    dest_map.insert("AD",  "110".to_string());
+    dest_map.insert("AMD", "111".to_string());
+
+    let mut comp_map: HashMap<&str, String> = HashMap::new();
+    comp_map.insert("0",   "101010".to_string());
+    comp_map.insert("1",   "111111".to_string());
+    comp_map.insert("-1",  "111010".to_string());
+    comp_map.insert("D",   "001100".to_string());
+    comp_map.insert("A",   "110000".to_string());
+    comp_map.insert("M",   "110000".to_string());
+    comp_map.insert("!D",  "001101".to_string());
+    comp_map.insert("!A",  "110001".to_string());
+    comp_map.insert("!M",  "110001".to_string());
+    comp_map.insert("-D",  "001111".to_string());
+    comp_map.insert("-A",  "110011".to_string());
+    comp_map.insert("-M",  "110011".to_string());
+    comp_map.insert("D+1", "011111".to_string());
+    comp_map.insert("A+1", "110111".to_string());
+    comp_map.insert("M+1", "110111".to_string());
+    comp_map.insert("D-1", "001110".to_string());
+    comp_map.insert("A-1", "110010".to_string());
+    comp_map.insert("M-1", "110010".to_string());
+    comp_map.insert("D+A", "000010".to_string());
+    comp_map.insert("D+M", "000010".to_string());
+    comp_map.insert("D-A", "010011".to_string());
+    comp_map.insert("D-M", "010011".to_string());
+    comp_map.insert("A-D", "000111".to_string());
+    comp_map.insert("M-D", "000111".to_string());
+    comp_map.insert("D&A", "000000".to_string());
+    comp_map.insert("D&M", "000000".to_string());
+    comp_map.insert("D|A", "010101".to_string());
+    comp_map.insert("D|M", "010101".to_string());
+
+    let mut jump_map: HashMap<&str, String> = HashMap::new();
+    jump_map.insert("",    "000".to_string());
+    jump_map.insert("JGT", "001".to_string());
+    jump_map.insert("JEQ", "010".to_string());
+    jump_map.insert("JGE", "011".to_string());
+    jump_map.insert("JLT", "100".to_string());
+    jump_map.insert("JNE", "101".to_string());
+    jump_map.insert("JLE", "110".to_string());
+    jump_map.insert("JMP", "111".to_string());
+
+    // define initial symbol map of builtins TODO: &str instead of String
+    let mut symbol_map: HashMap<&str, String> = HashMap::new();
+    symbol_map.insert("SP", "0".to_string());
+    symbol_map.insert("LCL", "1".to_string());
+    symbol_map.insert("ARG", "2".to_string());
+    symbol_map.insert("THIS", "3".to_string());
+    symbol_map.insert("THAT", "4".to_string());
+    symbol_map.insert("R0", "0".to_string());
+    symbol_map.insert("R1", "1".to_string());
+    symbol_map.insert("R2", "2".to_string());
+    symbol_map.insert("R3", "3".to_string());
+    symbol_map.insert("R4", "4".to_string());
+    symbol_map.insert("R5", "5".to_string());
+    symbol_map.insert("R6", "6".to_string());
+    symbol_map.insert("R7", "7".to_string());
+    symbol_map.insert("R8", "8".to_string());
+    symbol_map.insert("R9", "9".to_string());
+    symbol_map.insert("R10", "10".to_string());
+    symbol_map.insert("R11", "11".to_string());
+    symbol_map.insert("R12", "12".to_string());
+    symbol_map.insert("R13", "13".to_string());
+    symbol_map.insert("R14", "14".to_string());
+    symbol_map.insert("R15", "15".to_string());
+    symbol_map.insert("SCREEN", "16384".to_string());
+    symbol_map.insert("KBD", "24576".to_string());
 
     // get user args
     let args: Vec<String> = env::args().collect();
@@ -240,72 +313,69 @@ fn main() {
         println!("Missing arguments!");
         println!("Usage: run FILENAME");
         panic!();
-    }
+    };
+    if !&args[1].contains(".asm") {
+        println!("Cannot assemble files that arent '.asm'");
+        panic!();
+    };
 
-    // get file contents
-    let file_contents = get_file_contents(&args[1]);
+    let file_contents = get_file_contents(Path::new(&args[1]));
+    let output_file = create_file(Path::new(&args[1].replace(".asm", ".hack")));
 
     // first pass: add L symbols to symbol table
     let mut line_count = -1;
     for line in file_contents.lines() {
 
         // strip comments
-        let raw_line = remove_comments(&line);
-        if raw_line == "" { continue };
+        let comment_free = remove_comments(&line);
+        if comment_free == "" { continue };
 
         line_count += 1;
         
         // get command type of line
-        let command_type = get_command_type(raw_line);
+        let command_type = get_command_type(comment_free);
 
         if let CommandType::L = command_type { // this is a condensed match
-            let symbol = get_symbol_l_command(raw_line);
+            let symbol = get_symbol_l_command(comment_free);
 
-            match symbol_table.get(&symbol) {
+            match symbol_map.get(&symbol) {
                 Some(_) => { continue },
                 _ => { // if symbol not already in table
-                    symbol_table.insert(symbol, line_count.to_string());
+                    symbol_map.insert(symbol, line_count.to_string());
                     line_count -= 1; // don't count label symbol as a line
                 }
             }
         }
     }
 
-    for (key, value) in &symbol_table {
-        println!("{}: {}", key, value);
-    }
-
     // second pass: replace symbols with numbers, convert to bits
     let mut var_count = 16;
-    for (ii, line) in file_contents.lines().enumerate() {
+    for line in file_contents.lines() {
 
-        println!("Line {}: '{}'", ii, line);
+        // println!("Line {}: '{}'", ii, line);
         
-        // strip comments
-        let raw_line = remove_comments(&line);
-        println!("Parsed: '{}'", raw_line);
-        if raw_line == "" { continue };
+        let comment_free = remove_comments(&line);
+        // println!("Uncommented: '{}'", comment_free);
+        if comment_free == "" { continue };
         
-        // get command type of line
-        let command_type = get_command_type(raw_line);
-        println!("Type: '{:?}'", command_type);
+        let command_type = get_command_type(comment_free);
+        // println!("Type: '{:?}'", command_type);
 
         let symbol = match command_type {
             CommandType::A => {
-                let symbol = get_symbol_a_command(raw_line);
+                let symbol = get_symbol_a_command(comment_free);
 
                 // put var number in symbol table if not already
-                match symbol_table.get(&symbol) {
+                match symbol_map.get(&symbol) {
                     Some(_) => {}, // do nothing if already in table
                     _ => { // if symbol not already in table
-                        symbol_table.insert(&symbol, var_count.to_string());
+                        symbol_map.insert(&symbol, var_count.to_string());
                         var_count += 1; // increment variables declared
                     }
                 }
                 symbol
             }
             CommandType::L => {
-                // get_symbol_l_command(raw_line)
                 continue // no bits for L commands
             }
             CommandType::C => {
@@ -315,77 +385,26 @@ fn main() {
 
         // replace symbol with number in line if necessary
         let parsed_line = match symbol {
-            "" => raw_line.to_string(),
-            _ => raw_line.replace(symbol, symbol_table.get(&symbol).unwrap())
+            "" => comment_free.to_string(),
+            _ => comment_free.replace(symbol, symbol_map.get(&symbol).unwrap())
         };
 
-        println!("Parsed line: {}", parsed_line);
+        // println!("Parsed line: {}", parsed_line);
         
         // create bit line based on parsed
         let bits = match command_type {
             CommandType::A => {
-                get_a_bits(parsed_line)
+                get_a_bits(&parsed_line)
             }
             CommandType::C => {
-                get_c_bits(parsed_line)
+                get_c_bits(&parsed_line, &comp_map, &dest_map, &jump_map)
             }
             CommandType::L => {
                 panic!();
             }
         };
 
-        // write bits to new file
+        // println!("{}", bits);
+        write_to_file(&output_file, bits);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// fn raw_line_mod(line: &str) -> String {
-    
-//     // find the index where comments begin on the line
-//     let idx_comment = match line.find("//") {
-//         Some(idx) => idx,
-//         _ => line.len()
-//     };
-//     println!("{}", idx_comment);
-
-//     // truncate the line after the comment chars
-//     line[0..idx_comment].to_string()
-//     // String::from("dummy")
-// }
-
-
-
-        // let symbol = if command_type == CommandType::A {
-        //     // get symbol
-        //     let symbol = get_symbol_a_command(raw_line);
-
-        //     // put var number in symbol table if not already
-        //     match symbol_table.get(&symbol) {
-        //         Some(_) => {}, // do nothing if already in table
-        //         _ => { // if symbol not already in table
-        //             symbol_table.insert(&symbol, var_count.to_string());
-        //             var_count += 1; // increment variables declared
-        //         }
-        //     }
-        //     symbol
-        // } else if command_type == CommandType::L {
-        //     // get symbol
-        //     get_symbol_l_command(raw_line)
-        // } else {
-        //     panic!()
-        // };
