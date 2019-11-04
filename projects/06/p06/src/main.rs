@@ -25,7 +25,7 @@ enum CommandType {
 /// 
 /// # Arguments
 /// 
-/// * `path` - A string slice that holds the file path
+/// * `path` - A std::path::Path that contains the input file path
 fn get_file_contents(path: &Path) -> String { // takes reference to str, "read only"
     let file = File::open(path).expect("Failed to open file");
     let mut buf_reader = BufReader::new(file); // buffer reader for file
@@ -35,12 +35,17 @@ fn get_file_contents(path: &Path) -> String { // takes reference to str, "read o
     contents // returns contents
 }
 
+#[test]
+fn test_get_file_contents() {
+    // no test implemented
+}
 
-/// Returns a raw line after removing comments and white space
+
+/// Returns a str after removing comments and white space
 /// 
 /// # Arguments
 /// 
-/// * `line` - A mutable reference that holds the current line
+/// * `line` - the current line
 fn remove_comments(line: &str) -> &str {
     
     // find the index where comments begin on the line
@@ -49,7 +54,7 @@ fn remove_comments(line: &str) -> &str {
         _ => line.len()
     };
 
-    // return a reference to the reduced str
+    // return a reference to the reduced str with no start/end whitespace
     // note that memory contents are the same, just pointer and/or len changed
     &line[0..idx_comment].trim()
 }
@@ -64,11 +69,11 @@ fn test_stripped_line() {
 }
 
 
-/// Returns a string slice that indicates command type
+/// Returns CommandType of input line
 /// 
 /// # Arguments
 /// 
-/// * `line` - A string slice that holds the current line
+/// * `line` - a string slice that holds the current line
 fn get_command_type(line: &str) -> CommandType {
     if line.contains('@') {
         return CommandType::A;
@@ -87,7 +92,12 @@ fn test_get_command_type() {
     assert_eq!(CommandType::C, get_command_type("0;JMP"));
 }
 
-/// INSERT DOCS HERE
+
+/// Get symbol represented in A command, e.g. `@SYMBOL`
+/// 
+/// # Arguments
+/// 
+/// * `command` - a string slice that holds the A command with the symbol
 fn get_symbol_a_command(command: &str) -> &str {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -117,8 +127,13 @@ fn test_get_symbol_a_command() {
 }
 
 
-/// INSERT DOCS HERE
-fn contains_symbol(stripped_line: &str) -> bool {
+/// Checks if the A command contains a symbol (returns true) or 
+/// refers to a number directly (returns false)
+/// 
+/// # Arguments
+/// 
+/// * `stripped_line` - input line free of comments and whitespace
+fn a_command_contains_symbol(stripped_line: &str) -> bool {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
                 r"^@([^\d][a-zA-Z0-9_\.$:]*)\s*(\S*)"
@@ -131,10 +146,18 @@ fn contains_symbol(stripped_line: &str) -> bool {
     }
 }
 
-/// INSERT TEST HERE
+#[test]
+fn test_a_command_contains_symbol() {
+    assert_eq!(true, a_command_contains_symbol("@test"));
+    assert_eq!(false, a_command_contains_symbol("@1"));
+}
 
 
-/// INSERT DOCS HERE
+/// Get symbol represented in L command, e.g. `(SYMBOL)`
+/// 
+/// # Arguments
+/// 
+/// * `command` - a string slice that holds the L command with the symbol
 fn get_symbol_l_command(command: &str) -> &str {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -164,7 +187,11 @@ fn test_get_symbol_l_command() {
 }
 
 
-/// INSERT DOCS HERE
+/// Get (dest, comp, jump) mnemonics contained in complete command
+/// 
+/// # Arguments
+/// 
+/// * `command` - a string slice that holds the C command with the mnemonics
 fn get_c_command_mnemonics(command: &str) -> (&str, &str, &str) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -194,7 +221,12 @@ fn test_get_c_command_mnemonics() {
     assert_eq!(("", "0", "JMP"), get_c_command_mnemonics("0;JMP"));
 }
 
-/// INSERT DOCS HERE
+
+/// Get 16 bit text representation of A command
+/// 
+/// # Arguments
+/// 
+/// * `command` - a string slice that holds the A command
 fn get_a_bits(command: &str) -> String {
     match command.replace("@", "").parse::<i32>() {
         Ok(num) => format!("{:#018b}", num).to_string().replace("0b", ""),
@@ -204,10 +236,21 @@ fn get_a_bits(command: &str) -> String {
     }
 }
 
-/// INSERT TEST HERE
+#[test]
+fn test_get_a_bits() {
+    assert_eq!("0000000000000010", get_a_bits("@2"));
+    assert_eq!("0000000000000001", get_a_bits("@1"));
+}
 
 
-/// INSERT DOCS HERE
+/// Get 16 bit text representation of C command
+/// 
+/// # Arguments
+/// 
+/// * `command` - a string slice that holds the C command
+/// * `comp_map` - hashmap of comp mnemonics to bits
+/// * `dest_map` - hashmap of dest mnemonics to bits
+/// * `jump_map` - hashmap of jump mnemonics to bits
 fn get_c_bits(
     command: &str,
     comp_map: &HashMap<&str, String>,
@@ -223,16 +266,28 @@ fn get_c_bits(
     bits + comp_bits + dest_bits + jump_bits
 }
 
-/// INSERT TEST HERE
+#[test]
+fn test_get_c_bits() {
+    // not implemented
+}
 
 
-/// INSERT DOCS HERE
+/// Create and return writable file based on path
+/// 
+/// # Arguments
+/// 
+/// * `path`
 fn create_file(path: &Path) -> File {
     File::create(&path).unwrap()
 }
 
 
-/// INSERT DOCS HERE
+/// Write line to file
+/// 
+/// # Arguments
+/// 
+/// * `file` - writable file
+/// * `line` - line to write to file
 fn write_to_file(mut file: &File, line: String) {
     // Write the `LOREM_IPSUM` string to `file`, returns `io::Result<()>`
     file.write_all(format!("{}\n", line).as_bytes()).expect("Failed to write line to file!");
@@ -372,7 +427,7 @@ fn main() {
 
         let parsed_line = match command_type {
             CommandType::A => {
-                if contains_symbol(stripped_line) {
+                if a_command_contains_symbol(stripped_line) {
                     let symbol = get_symbol_a_command(stripped_line);
 
                     // put var number in symbol table if not already
