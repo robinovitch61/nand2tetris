@@ -26,7 +26,11 @@ enum CommandType {
 /// # Arguments
 /// 
 /// * `path` - A std::path::Path that contains the input file path
-fn get_file_contents(path: &Path) -> String { // takes reference to str, "read only"
+/// * `extension` - required extension for file
+fn get_file_contents(path: &Path, extension: &str) -> String { // takes reference to str, "read only"
+
+    assert_eq!(path.extension().unwrap(), extension);
+
     let file = File::open(path).expect("Failed to open file");
     let mut buf_reader = BufReader::new(file); // buffer reader for file
     let mut contents = String::new(); // mutable string variable for contents
@@ -294,6 +298,36 @@ fn write_to_file(mut file: &File, line: String) {
 }
 
 
+/// Parse command line arguments and return input file
+/// contents and output file to write to
+fn parse_args() -> (String, File, String, String) {
+    // get user args
+    let args: Vec<String> = env::args().collect();
+
+    // check user args
+    if args.len() < 2 {
+        println!("Missing required argument!");
+        println!("Usage: cargo run FILENAME");
+        panic!();
+    };
+
+    let in_path_str = &args[1];
+    let in_path = Path::new(in_path_str);
+    let out_path_str = args[1].replace(".asm", ".hack");
+    let out_path = Path::new(&out_path_str);
+
+    let file_contents = get_file_contents(in_path, "asm");
+    let output_file = create_file(out_path);
+
+    (file_contents, output_file, in_path_str.to_string(), out_path_str.to_string())
+}
+
+#[test]
+fn test_parse_args() {
+    // not implemented
+}
+
+
 fn main() {
 
     // define C command hashmaps
@@ -373,22 +407,7 @@ fn main() {
     symbol_map.insert("SCREEN", "16384".to_string());
     symbol_map.insert("KBD", "24576".to_string());
 
-    // get user args
-    let args: Vec<String> = env::args().collect();
-
-    // check user args
-    if args.len() < 2 {
-        println!("Missing arguments!");
-        println!("Usage: run FILENAME");
-        panic!();
-    };
-    if !&args[1].contains(".asm") {
-        println!("Cannot assemble files that arent '.asm'");
-        panic!();
-    };
-
-    let file_contents = get_file_contents(Path::new(&args[1]));
-    let output_file = create_file(Path::new(&args[1].replace(".asm", ".hack")));
+    let (file_contents, output_file, in_path, out_path) = parse_args();
 
     // first pass: add L symbols to symbol table
     let mut line_count = -1;
@@ -472,4 +491,6 @@ fn main() {
 
         write_to_file(&output_file, bits);
     }
+
+    println!("\nAssembled {:?} to {:?}\n", in_path, out_path);
 }
