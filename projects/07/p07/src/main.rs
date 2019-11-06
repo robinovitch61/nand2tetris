@@ -17,15 +17,15 @@ extern crate lazy_static;
 //     (printing with {:?} tells type)
 #[derive(PartialEq, Eq, Debug)]
 enum CommandType {
-    C_ARITHMETIC,
-    C_PUSH,
-    C_POP,
-    C_LABEL,
-    C_GOTO,
-    C_IF,
-    C_FUNCTION,
-    C_RETURN,
-    C_CALL
+    CArithmetic,
+    CPush,
+    CPop,
+    CLabel,
+    CGoTo,
+    CIf,
+    CFunction,
+    CReturn,
+    CCall
 }
 
 /// Returns a String of the file contents at path
@@ -114,7 +114,7 @@ fn test_parse_args() {
 /// 
 /// # Arguments
 /// 
-/// * `line` - the current line
+/// * `line` - the raw line
 fn remove_comments(line: &str) -> &str {
     
     // find the index where comments begin on the line
@@ -139,11 +139,11 @@ fn test_stripped_line() {
 
 
 /// Checks if VM code line is one of the 9 possible
-/// C_ARITHMETIC commands
+/// CArithmetic commands
 /// 
 /// # Arguments
 /// 
-/// * 
+/// * `line` - string slice that holds possible arithmetic command
 fn is_arithmetic(line: &str) -> bool {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -169,7 +169,6 @@ fn test_is_arithmetic() {
     assert_eq!(false, is_arithmetic("add sub"));
 }
 
-/// ***** TO DO
 /// Gets command type for VM code line
 /// 
 /// # Arguments
@@ -177,58 +176,62 @@ fn test_is_arithmetic() {
 /// * `line` - string slice that holds the current line
 fn get_command_type(line: &str) -> CommandType {
     if is_arithmetic(line) {
-        CommandType::C_ARITHMETIC
+        CommandType::CArithmetic
     } else if &line[0..4] == "push" {
-        CommandType::C_PUSH
+        CommandType::CPush
     } else if &line[0..3] == "pop" {
-        CommandType::C_POP
-    } else { // this is temporary
+        CommandType::CPop
+    // to be extended
+    } else {
         panic!();
     }
 }
 
 #[test]
 fn test_get_command_type() {
-    assert_eq!(CommandType::C_PUSH, get_command_type("push constant 1"));
-    // ADD MORE TESTS
+    assert_eq!(CommandType::CPush, get_command_type("push constant 1"));
+    assert_eq!(CommandType::CPop, get_command_type("pop constant 1"));
+    assert_eq!(CommandType::CArithmetic, get_command_type("eq"));
 }
 
 
-/// ***** TO DO
 /// Writes assembly code for push and pop commands
 /// 
 /// # Arguments
 /// 
-/// * `command_type` (C_PUSH or C_POP)
-/// * `segment` (constant, local, argument, etc.)
-/// * `index`
-fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &str, index: i32) {
-    match segment { // TO DO extend
+/// * `file` - output file
+/// * `line` - push/pop command
+/// * `command_type` - push or pop
+/// * `segment` - segment, e.g. "constant", "local", etc.
+/// * `num` - number to be pushed OR num to be popped in to
+fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &str, num: i32) {
+    match segment {
         "constant" => {
             match command_type {
-                CommandType::C_POP => {
+                CommandType::CPop => {
                     let asm_code = format!("// {line}\n\
                             @SP\n\
                             AM=M-1\n\
                             D=M\n\
-                            @{index}\n\
-                            M=D", line=line, index=index);
+                            @{num}\n\
+                            M=D", line=line, num=num);
                     write_to_file(file, asm_code)
                 },
-                CommandType::C_PUSH => { // correct
+                CommandType::CPush => { // correct
                     let asm_code = format!("// {line}\n\
-                            @{index}\n\
+                            @{num}\n\
                             D=A\n\
                             @SP\n\
                             A=M\n\
                             M=D\n\
                             @SP\n\
-                            M=M+1", line=line, index=index);
+                            M=M+1", line=line, num=num);
                     write_to_file(file, asm_code)
                 },
-                _ => panic!("Non C_PUSH or C_POP type found in write_push_pop!")
+                _ => panic!("Non CPush or CPop type found in write_push_pop!")
             }
         },
+        // to be extended
         "other_stuff" => (),
         _ => ()
     }
@@ -240,20 +243,21 @@ fn test_write_push_pop() {
 }
 
 
-/// ***** TO DO
-/// Writes assembly code for push and pop commands
+/// Writes assembly code for push and pop commands to output file
 /// 
 /// # Arguments
 /// 
-/// * `command_type` (C_PUSH or C_POP)
-/// * `segment` (constant, local, argument, etc.)
-/// * `index`
+/// * `file` - output file
+/// * `line` - input arithmetic command ("add", "sub", "eq", etc.)
+/// * `cmp_count` - count of previous comparison operations ("eq", "lt", and "gt").
+///     Used to mark jump and continue locations in these operations such that each
+///     label is unique.
 fn write_arithmetic(file: &File, line: &str, cmp_count: i32) -> i32 {
 
     let mut new_cmp_count = cmp_count;
 
     match line {
-        "add" => { // correct
+        "add" => {
             let asm_code = format!("// {line}\n\
                 @SP\n\
                 AM=M-1\n\
@@ -374,7 +378,7 @@ fn write_arithmetic(file: &File, line: &str, cmp_count: i32) -> i32 {
         "not" => {
             let asm_code = format!("// {line}\n\
                 @SP\n\
-                A=M-1
+                A=M-1\n\
                 M=!M", line=line);
             write_to_file(file, asm_code)
         },
@@ -408,17 +412,13 @@ fn parse_push_pop(line: &str) -> (&str, i32) {
     capture.get(3).unwrap().as_str().parse::<i32>().unwrap())
 }
 
-// #[test]
-// fn test_get_symbol_a_command() {
-//     assert_eq!("test", get_symbol_a_command("@test"));
-//     assert_eq!("Test_:123$", get_symbol_a_command("@Test_:123$"));
-//     let result = std::panic::catch_unwind(|| get_symbol_a_command("@Test_:123$%")); // % is invalid
-//     assert!(result.is_err());
-//     let result = std::panic::catch_unwind(|| get_symbol_a_command("@test test"));
-//     assert!(result.is_err());
-//     let result = std::panic::catch_unwind(|| get_symbol_a_command("@1test"));
-//     assert!(result.is_err());
-// }
+#[test]
+fn test_parse_push_pop() {
+    assert_eq!(("static", 1), parse_push_pop("push static 1"));
+    assert_eq!(("local", 10), parse_push_pop("pop local 10"));
+    let result = std::panic::catch_unwind(|| parse_push_pop("eq")); // % is invalid
+    assert!(result.is_err());
+}
 
 
 /// ********************************
@@ -439,15 +439,15 @@ fn main () {
         println!("Command type: {:?}", command_type);
 
         match command_type {
-            CommandType::C_PUSH => {
+            CommandType::CPush => {
                 let (segment, index) = parse_push_pop(clean_line);
                 write_push_pop(&output_file, line, command_type, segment, index);
             },
-            CommandType::C_POP => {
+            CommandType::CPop => {
                 let (segment, index) = parse_push_pop(clean_line);
                 write_push_pop(&output_file, line, command_type, segment, index);
             },
-            CommandType::C_ARITHMETIC => {
+            CommandType::CArithmetic => {
                 cmp_count = write_arithmetic(&output_file, line, cmp_count);
             },
             _ => ()
