@@ -203,32 +203,228 @@ fn test_get_command_type() {
 /// * `line` - push/pop command
 /// * `command_type` - push or pop
 /// * `segment` - segment, e.g. "constant", "local", etc.
-/// * `num` - number to be pushed OR num to be popped in to
-fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &str, num: i32) {
+/// * `index` - index for push/pop
+fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &str, index: i32) {
     match segment {
         "constant" => {
             match command_type {
+                // in constant segment, pop should not be implemented
+                CommandType::CPop => {
+                    panic!("pop constant command detected!")
+                    // let asm_code = format!("// {line}\n\
+                    //         @SP\n\
+                    //         AM=M-1\n\
+                    //         D=M\n\
+                    //         @{index}\n\
+                    //         M=D", line=line, index=index);
+                    // write_to_file(file, asm_code)
+                },
+                // in constant segment, index is treated as value to push on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "local" => {
+            match command_type {
+                // in local segment, pop puts top of stack at index in to local memory
                 CommandType::CPop => {
                     let asm_code = format!("// {line}\n\
-                            @SP\n\
-                            AM=M-1\n\
-                            D=M\n\
-                            @{num}\n\
-                            M=D", line=line, num=num);
+                        @{index}\n\
+                        D=A\n\
+                        @LCL\n\
+                        A=M\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
                     write_to_file(file, asm_code)
                 },
-                CommandType::CPush => { // correct
+                // in local segment, push puts index in to local memory on to stack
+                CommandType::CPush => {
                     let asm_code = format!("// {line}\n\
-                            @{num}\n\
-                            D=A\n\
-                            @SP\n\
-                            A=M\n\
-                            M=D\n\
-                            @SP\n\
-                            M=M+1", line=line, num=num);
+                        @{index}\n\
+                        D=A\n\
+                        @LCL\n\
+                        A=M\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
                     write_to_file(file, asm_code)
                 },
-                _ => panic!("Non CPush or CPop type found in write_push_pop!")
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "argument" => {
+            match command_type {
+                // in argument segment, pop puts top of stack at index in to argument memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @ARG\n\
+                        A=M\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in argument segment, push puts index in to argument memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @ARG\n\
+                        A=M\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "this" => {
+            match command_type {
+                // in this segment, pop puts top of stack at index in to this memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @THIS\n\
+                        A=M\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in this segment, push puts index in to this memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @THIS\n\
+                        A=M\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "that" => {
+            match command_type {
+                // in that segment, pop puts top of stack at index in to that memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @THAT\n\
+                        A=M\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in that segment, push puts index in to that memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @THAT\n\
+                        A=M\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "temp" => {
+            match command_type {
+                // in that segment, pop puts top of stack at index in to that memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @5\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in that segment, push puts index in to that memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @5\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
             }
         },
         // to be extended
