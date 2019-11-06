@@ -4,3 +4,4 @@ test*.txt
 *.asm
 *.hack
 *.dat
+*.out
