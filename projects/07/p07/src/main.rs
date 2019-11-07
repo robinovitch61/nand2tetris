@@ -200,11 +200,12 @@ fn test_get_command_type() {
 /// # Arguments
 /// 
 /// * `file` - output file
+/// * `file_name` - input filename, used for static vars
 /// * `line` - push/pop command
 /// * `command_type` - push or pop
 /// * `segment` - segment, e.g. "constant", "local", etc.
 /// * `index` - index for push/pop
-fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &str, index: i32) {
+fn write_push_pop(file: &File, file_name: &String, line: &str, command_type: CommandType, segment: &str, index: i32) {
     match segment {
         "constant" => {
             match command_type {
@@ -392,7 +393,7 @@ fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &
         },
         "temp" => {
             match command_type {
-                // in that segment, pop puts top of stack at index in to that memory
+                // in temp segment, pop puts top of stack at index in to temp memory
                 CommandType::CPop => {
                     let asm_code = format!("// {line}\n\
                         @{index}\n\
@@ -409,7 +410,7 @@ fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &
                         M=D", line=line, index=index);
                     write_to_file(file, asm_code)
                 },
-                // in that segment, push puts index in to that memory on to stack
+                // in temp segment, push puts index in to temp memory on to stack
                 CommandType::CPush => {
                     let asm_code = format!("// {line}\n\
                         @{index}\n\
@@ -427,8 +428,70 @@ fn write_push_pop(file: &File, line: &str, command_type: CommandType, segment: &
                 _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
             }
         },
-        // to be extended
-        "other_stuff" => (),
+        "pointer" => {
+            match command_type {
+                // in pointer segment, pop puts top of stack at index in to pointer memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @3\n\
+                        D=D+A\n\
+                        @R13\n\
+                        M=D\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @R13\n\
+                        A=M\n\
+                        M=D", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in pointer segment, push puts index in to pointer memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{index}\n\
+                        D=A\n\
+                        @3\n\
+                        A=A+D\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
+        "static" => {
+            match command_type {
+                // in static segment, pop puts top of stack at index in to static memory
+                CommandType::CPop => {
+                    let asm_code = format!("// {line}\n\
+                        @SP\n\
+                        AM=M-1\n\
+                        D=M\n\
+                        @{file_name}.{index}\n\
+                        M=D", line=line, file_name=file_name, index=index);
+                    write_to_file(file, asm_code)
+                },
+                // in static segment, push puts index in to static memory on to stack
+                CommandType::CPush => {
+                    let asm_code = format!("// {line}\n\
+                        @{file_name}.{index}\n\
+                        D=M\n\
+                        @SP\n\
+                        A=M\n\
+                        M=D\n\
+                        @SP\n\
+                        M=M+1", line=line, file_name=file_name, index=index);
+                    write_to_file(file, asm_code)
+                },
+                _ => panic!("Non CPush or CPop CommandType found in write_push_pop!")
+            }
+        },
         _ => ()
     }
 }
@@ -617,13 +680,43 @@ fn test_parse_push_pop() {
 }
 
 
+/// Get file name from path
+/// 
+/// # Arguments
+/// 
+/// * `path` - path
+fn get_file_name(path: &str) -> String {
+    match path.rfind('/') {
+        Some(idx_slash) => {
+            match path.rfind('.') {
+                Some(idx_dot) => path[idx_slash+1..idx_dot].to_string(),
+                _ => path.to_string()
+            }
+        },
+        _ => {
+            match path.rfind('.') {
+                Some(idx_dot) => path[..idx_dot].to_string(),
+                _ => path.to_string()
+            }
+        }
+    }
+}
+
+#[test]
+fn test_get_file_name() {
+    assert_eq!("test", get_file_name("/asdfasdf/asdfasdf/test.vm"));
+    assert_eq!("test", get_file_name("/test.vm"));
+    assert_eq!("test", get_file_name("test.vm"));
+    assert_eq!("test", get_file_name("test"));
+}
+
 /// ********************************
 /// ************* MAIN *************
 /// ********************************
 fn main () {
 
     let (file_contents, output_file, in_path, out_path) = parse_args();
-    println!("{}", file_contents);
+    let in_file_name = get_file_name(&in_path);
 
     let mut cmp_count = 0;
     for line in file_contents.lines() {
@@ -637,11 +730,11 @@ fn main () {
         match command_type {
             CommandType::CPush => {
                 let (segment, index) = parse_push_pop(clean_line);
-                write_push_pop(&output_file, line, command_type, segment, index);
+                write_push_pop(&output_file, &in_file_name, line, command_type, segment, index);
             },
             CommandType::CPop => {
                 let (segment, index) = parse_push_pop(clean_line);
-                write_push_pop(&output_file, line, command_type, segment, index);
+                write_push_pop(&output_file, &in_file_name, line, command_type, segment, index);
             },
             CommandType::CArithmetic => {
                 cmp_count = write_arithmetic(&output_file, line, cmp_count);
