@@ -230,18 +230,24 @@ fn test_is_arithmetic() {
 fn get_command_type(line: &str) -> CommandType {
     if is_arithmetic(line) {
         CommandType::CArithmetic
-    } else if &line[0..4] == "push" {
-        CommandType::CPush
     } else if &line[0..3] == "pop" {
         CommandType::CPop
-    } else if &line[0..5] == "label" {
-        CommandType::CLabel
+    } else if &line[0..4] == "push" {
+        CommandType::CPush
     } else if &line[0..4] == "goto"{
         CommandType::CGoTo
+    } else if &line[0..4] == "call"{
+        CommandType::CCall
+    } else if &line[0..5] == "label" {
+        CommandType::CLabel
+    } else if &line[0..6] == "return"{
+        CommandType::CReturn
     } else if &line[0..7] == "if-goto"{
         CommandType::CIfGoTo
+    } else if &line[0..8] == "function"{
+        CommandType::CFunction
     } else {
-        panic!();
+        panic!("Line not a valid command!");
     }
 }
 
@@ -802,9 +808,60 @@ fn write_ifgoto(file: &fs::File, line: &str) {
         AM=M-1\n\
         D=M\n\
         @{label}\n\
-        D;JNE\n\
-        ", line=line, label=label);
+        D;JNE", line=line, label=label);
     write_to_file(file, asm_code);
+}
+
+
+/// Writes assembly code for function declarations to output file
+/// 
+/// # Arguments
+/// 
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_function(file: &fs::File, line: &str) {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^function ([a-zA-Z0-9._:]+) ([0-9]+)$"
+            ).unwrap();
+    };
+
+    println!("{}", line);
+    let capture = RE.captures(line)
+        .expect("Invalid function command!");
+
+    let func_name = capture.get(1).unwrap().as_str();
+    let n_args = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
+    let mut asm_code = format!("// {line}\n\
+        ({func_name})", line=line, func_name=func_name);
+    let push_0_asy = "\n@SP\nM=0\nA=A+1";
+    for _ in 0..n_args {
+        asm_code.push_str(push_0_asy);
+    }
+    write_to_file(file, asm_code);
+}
+
+// TODO: TEST THIS HERE^!
+
+/// Writes assembly code for function declarations to output file
+/// 
+/// # Arguments
+/// 
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_call(file: &fs::File, line: &str) {
+
+}
+
+
+/// Writes assembly code for function declarations to output file
+/// 
+/// # Arguments
+/// 
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_return(file: &fs::File, line: &str) {
+
 }
 
 
@@ -849,6 +906,15 @@ fn main () {
                 },
                 CommandType::CIfGoTo => {
                     write_ifgoto(&output_file, clean_line);
+                },
+                CommandType::CFunction => {
+                    write_function(&output_file, clean_line);
+                },
+                CommandType::CCall => {
+                    write_call(&output_file, clean_line);
+                },
+                CommandType::CReturn => {
+                    write_return(&output_file, clean_line);
                 },
                 _ => ()
             }
