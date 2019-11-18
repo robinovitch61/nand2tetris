@@ -47,8 +47,7 @@ enum SegType {
 /// 
 /// * `path` - A std::path::Path that contains the input file path
 /// * `extension` - required extension for file
-fn get_file_contents(path: &Path, extension: &str) -> String { // takes reference to str, "read only"
-
+fn get_file_contents(path: &PathBuf, extension: &str) -> String {
     assert_eq!(path.extension().unwrap(), extension);
 
     let file = fs::File::open(path).expect("Failed to open file");
@@ -103,8 +102,10 @@ fn get_vm_filepaths(dir: &str) -> Vec<PathBuf>{
 
             let mut vm_paths: Vec<PathBuf> = Vec::new();
             for direntry in paths {
+                println!("{:?}", direntry);
                 let path = direntry.unwrap().path();
                 if path.extension().unwrap() == "vm" {
+                    println!("{:?}", path);
                     vm_paths.push(path);
                 }
             }
@@ -116,7 +117,7 @@ fn get_vm_filepaths(dir: &str) -> Vec<PathBuf>{
 
 /// Parse command line arguments and return input file
 /// contents and output file to write to
-fn parse_args() -> (Vec<String>, fs::File, String, String) {
+fn parse_args() -> (Vec<String>, Vec<String>, fs::File, String) {
     // get user args
     let args: Vec<String> = env::args().collect();
 
@@ -130,18 +131,34 @@ fn parse_args() -> (Vec<String>, fs::File, String, String) {
     // .vm file contents
     let vm_filepaths = get_vm_filepaths(&args[1]);
     let mut file_contents: Vec<String> = Vec::new();
-    for filepath in vm_filepaths {
-        // println!("{:?}", filepath);
-        file_contents.push(get_file_contents(Path::new(&filepath), "vm"));
+    let mut input_files: Vec<String> = Vec::new();
+    for filepath in &vm_filepaths {
+        file_contents.push(get_file_contents(&filepath, "vm"));
+        input_files.push(filepath.as_path().to_str().unwrap().to_string());
     }
 
     // output file
-    let mut out_path_str = args[1].replace(".vm", "");
-    out_path_str.push_str(&".asm");
+    let out_path_str = match vm_filepaths.len() {
+        0 => {
+            panic!("No .vm files to translate found")
+        },
+        1 => {
+            let path = &vm_filepaths[0];
+            path.to_str().unwrap().replace(".vm", ".asm")
+        },
+        _ => {
+            let mut out_path_str = String::from(&args[1]);
+            out_path_str.pop();
+            out_path_str.push_str(&".asm");
+            out_path_str
+        }
+    };
+    println!("HERE: {:?}", out_path_str);
     let out_path = Path::new(&out_path_str);
     let output_file = create_file(out_path);
+    println!("file: {:?}", output_file);
 
-    (file_contents, output_file, args[1].to_string(), out_path_str.to_string())
+    (file_contents, input_files, output_file, out_path_str.to_string())
 }
 
 /// Returns a cleaned string slice after removing comments and white space
@@ -658,8 +675,18 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
 ///     Used to mark jump and continue locations in these operations such that each
 ///     label is unique.
 fn write_label(file: &fs::File, line: &str) {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^label ([a-zA-Z0-9._:]+)$"
+            ).unwrap();
+    };
 
+    let capture = RE.captures(line)
+        .expect("Invalid label command!");
+
+    let label = capture.get(1).unwrap().as_str();
 }
+
 
 /// Get segment and index from push/pop command
 /// 
@@ -737,8 +764,10 @@ fn test_get_file_name() {
 /// ********************************
 fn main () {
 
-    let (file_contents, output_file, in_path, out_path) = parse_args();
-    for contents in file_contents {
+    let (file_contents, in_paths, output_file, out_path) = parse_args();
+    let mut it_file_contents = file_contents.iter();
+    let mut it_in_paths = in_paths.iter();
+    while let (Some(contents), Some(in_path)) = (it_file_contents.next(), it_in_paths.next()) {
         let in_file_name = get_file_name(&in_path);
 
         let mut cmp_count = 0;
@@ -770,7 +799,6 @@ fn main () {
             }
 
         }
+        println!("\nTranslated {:?}\n        -> {:?}\n", in_path, out_path);
     }
-
-    println!("\nTranslated {:?}\n        -> {:?}\n", in_path, out_path);
 }
