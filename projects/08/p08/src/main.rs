@@ -253,6 +253,77 @@ fn test_get_command_type() {
 }
 
 
+/// Get segment and index from push/pop command
+/// 
+/// # Arguments
+/// 
+/// * `line` - push/pop command
+fn parse_push_pop(line: &str) -> (SegType, i32) {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^(push|pop)\s*(\w*)\s*(\d*)" // TO DO may need refining
+            ).unwrap();
+    };
+
+    let capture = RE.captures(line)
+        .expect("Invalid push/pop command!");
+
+    let segment = match capture.get(2).unwrap().as_str() {
+        "constant" => SegType::SConstant,
+        "local" => SegType::SLocal,
+        "argument" => SegType::SArgument,
+        "this" => SegType::SThis,
+        "that" => SegType::SThat,
+        "temp" => SegType::STemp,
+        "pointer" => SegType::SPointer,
+        "static" => SegType::SStatic,
+        _ => panic!("Invalid segment")
+    };
+
+    let index = capture.get(3).unwrap().as_str().parse::<i32>().unwrap();
+    (segment, index)
+}
+
+#[test]
+fn test_parse_push_pop() {
+    assert_eq!((SegType::SStatic, 1), parse_push_pop("push static 1"));
+    assert_eq!((SegType::SLocal, 10), parse_push_pop("pop local 10"));
+    let result = std::panic::catch_unwind(|| parse_push_pop("eq")); // % is invalid
+    assert!(result.is_err());
+}
+
+
+/// Get file name from path
+/// 
+/// # Arguments
+/// 
+/// * `path` - path
+fn get_file_name(path: &str) -> String {
+    match path.rfind('/') {
+        Some(idx_slash) => {
+            match path.rfind('.') {
+                Some(idx_dot) => path[idx_slash+1..idx_dot].to_string(),
+                _ => path.to_string()
+            }
+        },
+        _ => {
+            match path.rfind('.') {
+                Some(idx_dot) => path[..idx_dot].to_string(),
+                _ => path.to_string()
+            }
+        }
+    }
+}
+
+#[test]
+fn test_get_file_name() {
+    assert_eq!("test", get_file_name("/asdfasdf/asdfasdf/test.vm"));
+    assert_eq!("test", get_file_name("/test.vm"));
+    assert_eq!("test", get_file_name("test.vm"));
+    assert_eq!("test", get_file_name("test"));
+}
+
+
 /// Write assembly code for push commands
 /// 
 /// # Arguments
@@ -532,8 +603,6 @@ fn write_pop(file: &fs::File, input_filename: &str, line: &str, segment: SegType
 ///     label is unique.
 fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
 
-    let mut new_cmp_count = cmp_count;
-
     match line {
         "add" => {
             let asm_code = format!("// {line}\n\
@@ -582,7 +651,6 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
                     A=M-1\n\
                     M=-1\n\
                 (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            new_cmp_count += 1;
             write_to_file(file, asm_code)
         },
         "gt" => {
@@ -605,7 +673,6 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
                     A=M-1\n\
                     M=-1\n\
                 (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            new_cmp_count += 1;
             write_to_file(file, asm_code)
         },
         "lt" => {
@@ -628,7 +695,6 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
                     A=M-1\n\
                     M=-1\n\
                 (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            new_cmp_count += 1;
             write_to_file(file, asm_code)
         },
         "and" => {
@@ -665,15 +731,13 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
 }
 
 
-/// Writes assembly code for push and pop commands to output file
+/// Writes assembly code for label commands to output file
+/// TODO: check if need to prepend filename or function?
 /// 
 /// # Arguments
 /// 
 /// * `file` - output file
-/// * `line` - input arithmetic command ("add", "sub", "eq", etc.)
-/// * `cmp_count` - count of previous comparison operations ("eq", "lt", and "gt").
-///     Used to mark jump and continue locations in these operations such that each
-///     label is unique.
+/// * `line` - input label command
 fn write_label(file: &fs::File, line: &str) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
@@ -685,77 +749,62 @@ fn write_label(file: &fs::File, line: &str) {
         .expect("Invalid label command!");
 
     let label = capture.get(1).unwrap().as_str();
+    let asm_code = format!("// {line}\n\
+        ({label})", line=line, label=label);
+    write_to_file(file, asm_code);
 }
 
 
-/// Get segment and index from push/pop command
+/// Writes assembly code for unconditional goto commands to output file
 /// 
 /// # Arguments
 /// 
-/// * `line` - push/pop command
-fn parse_push_pop(line: &str) -> (SegType, i32) {
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_goto(file: &fs::File, line: &str) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
-                r"^(push|pop)\s*(\w*)\s*(\d*)" // TO DO may need refining
+                r"^goto ([a-zA-Z0-9._:]+)$"
             ).unwrap();
     };
 
     let capture = RE.captures(line)
-        .expect("Invalid push/pop command!");
+        .expect("Invalid goto command!");
 
-    let segment = match capture.get(2).unwrap().as_str() {
-        "constant" => SegType::SConstant,
-        "local" => SegType::SLocal,
-        "argument" => SegType::SArgument,
-        "this" => SegType::SThis,
-        "that" => SegType::SThat,
-        "temp" => SegType::STemp,
-        "pointer" => SegType::SPointer,
-        "static" => SegType::SStatic,
-        _ => panic!("Invalid segment")
-    };
-
-    let index = capture.get(3).unwrap().as_str().parse::<i32>().unwrap();
-    (segment, index)
-}
-
-#[test]
-fn test_parse_push_pop() {
-    assert_eq!((SegType::SStatic, 1), parse_push_pop("push static 1"));
-    assert_eq!((SegType::SLocal, 10), parse_push_pop("pop local 10"));
-    let result = std::panic::catch_unwind(|| parse_push_pop("eq")); // % is invalid
-    assert!(result.is_err());
+    let label = capture.get(1).unwrap().as_str();
+    let asm_code = format!("// {line}\n\
+        @{label}\n\
+        0;JMP", line=line, label=label);
+    write_to_file(file, asm_code);
 }
 
 
-/// Get file name from path
+/// Writes assembly code for conditional goto commands to output file
 /// 
 /// # Arguments
 /// 
-/// * `path` - path
-fn get_file_name(path: &str) -> String {
-    match path.rfind('/') {
-        Some(idx_slash) => {
-            match path.rfind('.') {
-                Some(idx_dot) => path[idx_slash+1..idx_dot].to_string(),
-                _ => path.to_string()
-            }
-        },
-        _ => {
-            match path.rfind('.') {
-                Some(idx_dot) => path[..idx_dot].to_string(),
-                _ => path.to_string()
-            }
-        }
-    }
-}
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_ifgoto(file: &fs::File, line: &str) {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^if-goto ([a-zA-Z0-9._:]+)$"
+            ).unwrap();
+    };
 
-#[test]
-fn test_get_file_name() {
-    assert_eq!("test", get_file_name("/asdfasdf/asdfasdf/test.vm"));
-    assert_eq!("test", get_file_name("/test.vm"));
-    assert_eq!("test", get_file_name("test.vm"));
-    assert_eq!("test", get_file_name("test"));
+    println!("{}", line);
+    let capture = RE.captures(line)
+        .expect("Invalid if-goto command!");
+
+    let label = capture.get(1).unwrap().as_str();
+    let asm_code = format!("// {line}\n\
+        @SP\n\
+        AM=M-1\n\
+        D=M\n\
+        @{label}\n\
+        D;JNE\n\
+        ", line=line, label=label);
+    write_to_file(file, asm_code);
 }
 
 
@@ -789,11 +838,17 @@ fn main () {
                     write_pop(&output_file, &in_file_name, line, segment, index);
                 },
                 CommandType::CArithmetic => {
-                    write_arithmetic(&output_file, line, cmp_count);
+                    write_arithmetic(&output_file, clean_line, cmp_count);
                     cmp_count += 1;
                 },
                 CommandType::CLabel => {
-                    write_label(&output_file, line);
+                    write_label(&output_file, clean_line);
+                },
+                CommandType::CGoTo => {
+                    write_goto(&output_file, clean_line);
+                },
+                CommandType::CIfGoTo => {
+                    write_ifgoto(&output_file, clean_line);
                 },
                 _ => ()
             }
