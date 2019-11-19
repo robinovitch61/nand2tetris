@@ -831,17 +831,101 @@ fn write_function(file: &fs::File, line: &str) {
         .expect("Invalid function command!");
 
     let func_name = capture.get(1).unwrap().as_str();
-    let n_args = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
+    let n_locals = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
     let mut asm_code = format!("// {line}\n\
         ({func_name})", line=line, func_name=func_name);
-    let push_0_asy = "\n@SP\nM=0\nA=A+1";
-    for _ in 0..n_args {
+    let push_0_asy = "\n@SP\n\
+        A=M\n\
+        M=0\n\
+        @SP\n\
+        M=M+1";
+    for _ in 0..n_locals {
         asm_code.push_str(push_0_asy);
     }
     write_to_file(file, asm_code);
 }
 
-// TODO: TEST THIS HERE^!
+
+/// Writes assembly code for return statement to output file
+/// 
+/// # Arguments
+/// 
+/// * `file` - output file
+/// * `line` - input unconditional goto command
+fn write_return(file: &fs::File, line: &str) {
+    let asm_code = format!("// {line}\n\
+
+        // FRAME = LCL = M[R13]\n\
+        @LCL\n\
+        D=M // D = M[LCL]\n\
+        @R13\n\
+        M=D // M[R13] = M[LCL]\n\
+
+        // RET = *(FRAME-5) = M[R14]\n\
+        @5\n\
+        D=A // D = 5\n\
+        @R13\n\
+        A=M-D // A = LCL - 5\n\
+        D=M // D = M[LCL-5]\n\
+        @R14\n\
+        M=D // M[R14] = M[LCL-5]\n\
+
+        // *ARG = pop()\n\
+        @SP\n\
+        AM=M-1\n\
+        D=M // D = pop()\n\
+        @ARG\n\
+        A=M\n\
+        M=D\n\
+
+        // SP = ARG+1\n\
+        D=A+1\n\
+        @SP\n\
+        M=D // M[SP] = M[ARG] + 1\n\
+
+        // THAT = *(FRAME-1)\n\
+        @R13\n\
+        D=M // D = M[R13] = LCL\n\
+        @1\n\
+        A=D-A // A = LCL - 1\n\
+        D=M // D = M[LCL - 1]\n\
+        @THAT\n\
+        M=D\n\
+
+        // THIS = *(FRAME-2)\n\
+        @R13\n\
+        D=M // D = M[R13] = LCL\n\
+        @2\n\
+        A=D-A // A = LCL - 2\n\
+        D=M // D = M[LCL - 2]\n\
+        @THIS\n\
+        M=D\n\
+
+        // ARG = *(FRAME-3)\n\
+        @R13\n\
+        D=M // D = M[R13] = LCL\n\
+        @3\n\
+        A=D-A // A = LCL - 3\n\
+        D=M // D = M[LCL - 3]\n\
+        @ARG\n\
+        M=D\n\
+
+        // LCL = *(FRAME-4)\n\
+        @R13\n\
+        D=M // D = M[R13] = LCL\n\
+        @4\n\
+        A=D-A // A = LCL - 4\n\
+        D=M // D = M[LCL - 4]\n\
+        @LCL\n\
+        M=D\n\
+
+        // goto RET\n\
+        @R14\n\
+        A=M // A = M[R14] = RET\n\
+        0;JMP", line=line);
+    write_to_file(file, asm_code);
+}
+
 
 /// Writes assembly code for function declarations to output file
 /// 
@@ -850,17 +934,6 @@ fn write_function(file: &fs::File, line: &str) {
 /// * `file` - output file
 /// * `line` - input unconditional goto command
 fn write_call(file: &fs::File, line: &str) {
-
-}
-
-
-/// Writes assembly code for function declarations to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_return(file: &fs::File, line: &str) {
 
 }
 
