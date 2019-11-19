@@ -142,23 +142,18 @@ fn parse_args() -> (Vec<String>, Vec<String>, fs::File, String) {
         0 => {
             panic!("No .vm files to translate found")
         },
-        1 => {
-            let path = &vm_filepaths[0];
-            path.to_str().unwrap().replace(".vm", ".asm")
-        },
         _ => {
-            let mut out_path_str = String::from(&args[1]);
-            out_path_str.pop();
+            let dir = PathBuf::from(&args[1]);
+            let filename = dir.join(dir.file_name().unwrap());
+            let mut out_path_str = String::from(filename.to_str().unwrap());
             out_path_str.push_str(&".asm");
             out_path_str
         }
     };
-    println!("HERE: {:?}", out_path_str);
     let out_path = Path::new(&out_path_str);
     let output_file = create_file(out_path);
-    println!("file: {:?}", output_file);
 
-    (file_contents, input_files, output_file, out_path_str.to_string())
+    (file_contents, input_files, output_file, out_path_str)
 }
 
 /// Returns a cleaned string slice after removing comments and white space
@@ -798,7 +793,6 @@ fn write_ifgoto(file: &fs::File, line: &str) {
             ).unwrap();
     };
 
-    println!("{}", line);
     let capture = RE.captures(line)
         .expect("Invalid if-goto command!");
 
@@ -826,7 +820,6 @@ fn write_function(file: &fs::File, line: &str) {
             ).unwrap();
     };
 
-    println!("{}", line);
     let capture = RE.captures(line)
         .expect("Invalid function command!");
 
@@ -927,14 +920,111 @@ fn write_return(file: &fs::File, line: &str) {
 }
 
 
-/// Writes assembly code for function declarations to output file
+/// Writes assembly code for call statement to output file
 /// 
 /// # Arguments
 /// 
 /// * `file` - output file
 /// * `line` - input unconditional goto command
-fn write_call(file: &fs::File, line: &str) {
+fn write_call(file: &fs::File, line: &str, call_count: i32) {
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r"^call ([a-zA-Z0-9._:]+) ([0-9]+)$"
+            ).unwrap();
+    };
 
+    let capture = RE.captures(line)
+        .expect("Invalid call command!");
+
+    let func_name = capture.get(1).unwrap().as_str();
+    let n_args = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
+
+    let asm_code = format!("// {line}\n\
+
+        // push return-address\n\
+        @return-address{call_count}\n\
+        D=A\n\
+        @SP\n\
+        A=M\n\
+        M=D\n\
+        @SP\n\
+        M=M+1\n\
+
+        // push LCL\n\
+        @LCL\n\
+        D=M\n\
+        @SP\n\
+        A=M\n\
+        M=D\n\
+        @SP\n\
+        M=M+1\n\
+
+        // push ARG\n\
+        @ARG\n\
+        D=M\n\
+        @SP\n\
+        A=M\n\
+        M=D\n\
+        @SP\n\
+        M=M+1\n\
+
+        // push THIS\n\
+        @THIS\n\
+        D=M\n\
+        @SP\n\
+        A=M\n\
+        M=D\n\
+        @SP\n\
+        M=M+1\n\
+
+        // push THAT\n\
+        @THAT\n\
+        D=M\n\
+        @SP\n\
+        A=M\n\
+        M=D\n\
+        @SP\n\
+        M=M+1\n\
+
+        // ARG = SP - n - 5\n\
+        @SP\n\
+        D=M\n\
+        @{n_args}\n\
+        D=D-A\n\
+        @5\n\
+        D=D-A\n\
+        @ARG\n\
+        M=D\n\
+
+        // LCL = SP\n\
+        @SP\n\
+        D=M\n\
+        @LCL\n\
+        M=D\n\
+
+        // goto f\n\
+        @{func_name}\n\
+        0;JMP\n\
+
+        // declare (return-address)\n\
+        (return-address{call_count})", line=line, n_args=n_args,
+        func_name=func_name, call_count=call_count);
+    write_to_file(file, asm_code);
+}
+
+
+/// Bootstrap to ensure Sys.init gets called first when multiple files
+/// 
+/// # Arguments
+/// 
+/// * output_file: file to bootstrap
+fn bootstrap(output_file: &fs::File) {
+    let set_stackpointer = "\n// Bootstrap\n\n@256\n\
+    D=A\n\
+    @SP\n\
+    M=D".to_string();
+    write_to_file(&output_file, set_stackpointer);
+    write_call(&output_file, "call Sys.init 0", 0);
 }
 
 
@@ -944,28 +1034,36 @@ fn write_call(file: &fs::File, line: &str) {
 fn main () {
 
     let (file_contents, in_paths, output_file, out_path) = parse_args();
+
+    // bootstrap if multiple files
+    if in_paths.len() > 1 {
+        bootstrap(&output_file);
+    }
+
+    let mut cmp_count = 0;
+    let mut call_count = 1; // already called Sys.init, start at 1
     let mut it_file_contents = file_contents.iter();
     let mut it_in_paths = in_paths.iter();
+    
     while let (Some(contents), Some(in_path)) = (it_file_contents.next(), it_in_paths.next()) {
         let in_file_name = get_file_name(&in_path);
 
-        let mut cmp_count = 0;
+        write_to_file(&output_file, format!("\n// {}\n", in_path));
+
         for line in contents.lines() {
             let clean_line = remove_comments(line);
             if clean_line == "" { continue };
-            println!("Clean line: {}", clean_line);
 
-            let command_type = get_command_type(line);
-            println!("Command type: {:?}", command_type);
+            let command_type = get_command_type(clean_line);
 
             match command_type {
                 CommandType::CPush => {
                     let (segment, index) = parse_push_pop(clean_line);
-                    write_push(&output_file, &in_file_name, line, segment, index);
+                    write_push(&output_file, &in_file_name, clean_line, segment, index);
                 },
                 CommandType::CPop => {
                     let (segment, index) = parse_push_pop(clean_line);
-                    write_pop(&output_file, &in_file_name, line, segment, index);
+                    write_pop(&output_file, &in_file_name, clean_line, segment, index);
                 },
                 CommandType::CArithmetic => {
                     write_arithmetic(&output_file, clean_line, cmp_count);
@@ -984,12 +1082,12 @@ fn main () {
                     write_function(&output_file, clean_line);
                 },
                 CommandType::CCall => {
-                    write_call(&output_file, clean_line);
+                    write_call(&output_file, clean_line, call_count);
+                    call_count += 1;
                 },
                 CommandType::CReturn => {
                     write_return(&output_file, clean_line);
                 },
-                _ => ()
             }
 
         }
