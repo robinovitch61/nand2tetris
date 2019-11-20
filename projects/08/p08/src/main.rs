@@ -355,7 +355,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 D=A\n\
                 @LCL\n\
                 A=M\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -371,7 +371,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 D=A\n\
                 @ARG\n\
                 A=M\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -387,7 +387,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 D=A\n\
                 @THIS\n\
                 A=M\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -403,7 +403,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 D=A\n\
                 @THAT\n\
                 A=M\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -418,7 +418,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 @{index}\n\
                 D=A\n\
                 @5\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -433,7 +433,7 @@ fn write_push(file: &fs::File, input_filename: &str, line: &str, segment: SegTyp
                 @{index}\n\
                 D=A\n\
                 @3\n\
-                A=A+D\n\
+                A=D+A\n\
                 D=M\n\
                 @SP\n\
                 A=M\n\
@@ -612,7 +612,7 @@ fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
                 D=M\n\
                 @SP\n\
                 A=M-1\n\
-                M=M+D", line=line);
+                M=D+M", line=line);
             write_to_file(file, asm_code)
         },
         "sub" => {
@@ -941,8 +941,8 @@ fn write_call(file: &fs::File, line: &str, call_count: i32) {
 
     let asm_code = format!("// {line}\n\
 
-        // push return-address\n\
-        @return-address{call_count}\n\
+        // push returnaddr\n\
+        @returnaddr{call_count}\n\
         D=A\n\
         @SP\n\
         A=M\n\
@@ -1006,8 +1006,8 @@ fn write_call(file: &fs::File, line: &str, call_count: i32) {
         @{func_name}\n\
         0;JMP\n\
 
-        // declare (return-address)\n\
-        (return-address{call_count})", line=line, n_args=n_args,
+        // declare (returnaddr)\n\
+        (returnaddr{call_count})", line=line, n_args=n_args,
         func_name=func_name, call_count=call_count);
     write_to_file(file, asm_code);
 }
