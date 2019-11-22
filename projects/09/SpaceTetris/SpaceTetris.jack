@@ -1,0 +1,72 @@
+class SpaceTetris {
+    field Mooninite avatar;
+    field Arr bulletArr;
+    field int numBullets;
+    field int maxBullets;
+    field int direction; // 0=none, 1=left, 2=right
+
+    constructor SpaceTetris new() {
+        // x goes from 0 to 31, y from 0 to 15, starting top left
+        let avatar = Mooninite.new(0, 15);
+        let direction = 0;  // initial state is no movement
+        let maxBullets = 3;
+        let numBullets = 0;
+        let bulletArr = Array.new(maxBullets);
+        return this;
+    }
+
+    method void dispose() {
+        do avatar.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+
+    method void moveAvatar() {
+        if (direction = 1) { do avatar.moveLeft(); }
+        if (direction = 2) { do avatar.moveRight(); }
+        do Sys.wait(50);
+        return;
+    }
+
+    method void fire() {
+        var Bullet bullet;
+        var int bulletIdx;
+        let bullet = avatar.fireGun();
+        // do Output.printInt(bullet);
+        let bulletIdx = numBullets - (maxBullets * (numBullets / maxBullets));
+        let bulletArr[bulletIdx] = bullet;
+        let numBullets = numBullets + 1;
+        do Sys.wait(100);
+        return;
+    }
+
+    method void run() {
+        var char key;  // the key currently pressed by the user
+        var boolean exit;
+        var int idx;
+        var int bulletCount;
+        var Bullet currBullet;
+        let exit = false;
+        
+        while (~exit) {
+            let key = Keyboard.keyPressed();
+            if (key = 0) { let direction = 0; }   // no press
+            if (key = 81)  { let exit = true; }     // q key
+            if (key = 130) { let direction = 1; }   // left arrow
+            if (key = 132) { let direction = 2; }   // right arrow
+            if (key = 32) { do fire(); }
+            do moveAvatar();
+            let bulletCount = Math.min(numBullets, maxBullets);
+            while (idx < bulletCount) {
+                let currBullet = bulletArr[idx];
+                do currBullet.advanceUp();
+                let idx = idx + 1;
+            }
+            let idx = 0;
+        }
+        return;
+    }   
+}
+
+
+

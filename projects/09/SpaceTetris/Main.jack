@@ -1,0 +1,10 @@
+// run game
+class Main {
+   function void main() {
+        var SpaceTetris game;
+        let game = SpaceTetris.new();
+        do game.run();
+        do game.dispose();
+        return;
+   }
+}

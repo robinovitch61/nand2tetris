@@ -1,0 +1,75 @@
+class Bullet {
+
+    field int x, y; // top-left corner of sprite
+    static int memAddress;
+
+    constructor Bullet new(int Ax, int Ay) {
+        let x = Ax;
+        let y = 32*16*Ay;
+        do draw(x + y);
+        return this;
+    }
+
+    method void dispose() {
+        do erase();
+        do Memory.deAlloc(this);
+        return;
+    }
+
+	method void draw(int location) {
+		let memAddress = 16384 + location;
+		do Memory.poke(memAddress + 0, 384);
+		do Memory.poke(memAddress + 32, 960);
+		do Memory.poke(memAddress + 64, 2016);
+		do Memory.poke(memAddress + 96, 2016);
+		do Memory.poke(memAddress + 128, 1632);
+		do Memory.poke(memAddress + 160, 2016);
+		do Memory.poke(memAddress + 192, 2016);
+		do Memory.poke(memAddress + 224, 0);
+		do Memory.poke(memAddress + 256, 2640);
+		do Memory.poke(memAddress + 288, 6744);
+		do Memory.poke(memAddress + 320, 12876);
+		do Memory.poke(memAddress + 352, 16962);
+		do Memory.poke(memAddress + 384, 0);
+		do Memory.poke(memAddress + 416, 0);
+		do Memory.poke(memAddress + 448, 0);
+		do Memory.poke(memAddress + 480, 0);
+		return;
+	}
+
+	method void erase() {
+        var int location;
+        let location = x + y;
+        let memAddress = 16384 + location;
+        do Memory.poke(memAddress + 0, 0);
+        do Memory.poke(memAddress + 32, 0);
+        do Memory.poke(memAddress + 64, 0);
+        do Memory.poke(memAddress + 96, 0);
+        do Memory.poke(memAddress + 128, 0);
+        do Memory.poke(memAddress + 160, 0);
+        do Memory.poke(memAddress + 192, 0);
+        do Memory.poke(memAddress + 224, 0);
+        do Memory.poke(memAddress + 256, 0);
+        do Memory.poke(memAddress + 288, 0);
+        do Memory.poke(memAddress + 320, 0);
+        do Memory.poke(memAddress + 352, 0);
+        do Memory.poke(memAddress + 384, 0);
+        do Memory.poke(memAddress + 416, 0);
+        do Memory.poke(memAddress + 448, 0);
+        do Memory.poke(memAddress + 480, 0);
+        return;
+	}
+
+    method void advanceUp() {
+        if (y > 0) {
+            do Screen.setColor(false);
+            do erase();
+            let y = y - (32 * 5);
+            do draw(x + y);
+        }
+        else {
+            do dispose();
+        }
+        return;
+    }
+}
