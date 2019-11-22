@@ -1,40 +1,167 @@
 class Mouth {
     field int x;
+    static int width;
 
     constructor Mouth new(int Ax) {
+        let width = 3;
         let x = Ax;
-        do draw();
+        do draw(x);
         return this;
     }
 
-    method void draw() {
-        var int width;
-        var int counter;
-        var int memAddress;
-        let width = 2;
-        let x = 1;
-        let counter = 0;
-        while (counter < (width+1)) {
-            let memAddress = 16384 + (x * counter);
-            do Memory.poke(memAddress + 0, -1);
-            do Memory.poke(memAddress + 32, -1);
-            do Memory.poke(memAddress + 64, -1);
-            do Memory.poke(memAddress + 96, -1);
-            do Memory.poke(memAddress + 128, -1);
-            do Memory.poke(memAddress + 160, -1);
-            do Memory.poke(memAddress + 192, -1);
-            do Memory.poke(memAddress + 224, -1);
-            do Memory.poke(memAddress + 256, -1);
-            do Memory.poke(memAddress + 288, -1);
-            do Memory.poke(memAddress + 320, -1);
-            do Memory.poke(memAddress + 352, -1);
-            do Memory.poke(memAddress + 384, -1);
-            do Memory.poke(memAddress + 416, -1);
-            do Memory.poke(memAddress + 448, -1);
-            do Memory.poke(memAddress + 480, -1);
-            let counter = counter + 1;
+    method void moveRight(int by) {
+        if ((x + by + width) < 31) {
+            do erase(x);
+            let x = x + by;
+            do draw(x);
         }
         return;
     }
 
+    method void moveLeft(int by) {
+        if ((x - by + 1) > 0) {
+            do erase(x);
+            let x = x - by;
+            do draw(x);
+        }
+        return;
+    }
+
+    method int getStart() {
+        return x;
+    }
+
+    method void draw(int x) {
+        var int counter;
+        var int memAddress;
+        let counter = 0;
+
+        // top of jaw
+        let memAddress = 16384 + x;
+        do Memory.poke(memAddress + 0, -16);
+        do Memory.poke(memAddress + 32, -8);
+        do Memory.poke(memAddress + 64, -4);
+        do Memory.poke(memAddress + 96, -2);
+        do Memory.poke(memAddress + 128, 32766);
+        do Memory.poke(memAddress + 160, 32766);
+        do Memory.poke(memAddress + 192, 32766);
+        do Memory.poke(memAddress + 224, 32574);
+        do Memory.poke(memAddress + 256, 16190);
+        do Memory.poke(memAddress + 288, 8190);
+        do Memory.poke(memAddress + 320, 2044);
+        do Memory.poke(memAddress + 352, 2040);
+        do Memory.poke(memAddress + 384, 2032);
+        do Memory.poke(memAddress + 416, 1984);
+        do Memory.poke(memAddress + 448, 896);
+        do Memory.poke(memAddress + 480, 0);
+        
+        // mouth
+        while (counter < width) {
+            let memAddress = 16384 + x + counter + 1;
+            do Memory.poke(memAddress + 0, -1);
+            do Memory.poke(memAddress + 32, -1);
+            do Memory.poke(memAddress + 64, -1);
+            do Memory.poke(memAddress + 96, -1);
+            do Memory.poke(memAddress + 128, 0);
+            do Memory.poke(memAddress + 160, 0);
+            do Memory.poke(memAddress + 192, 0);
+            do Memory.poke(memAddress + 224, 0);
+            do Memory.poke(memAddress + 256, 0);
+            do Memory.poke(memAddress + 288, 0);
+            do Memory.poke(memAddress + 320, 0);
+            do Memory.poke(memAddress + 352, 0);
+            do Memory.poke(memAddress + 384, 0);
+            do Memory.poke(memAddress + 416, 0);
+            do Memory.poke(memAddress + 448, 0);
+            do Memory.poke(memAddress + 480, 0);
+            let counter = counter + 1;
+        }
+
+        // bottom of jaw
+        let memAddress = 16384 + x + counter + 1;
+        do Memory.poke(memAddress + 0, 16383);
+        do Memory.poke(memAddress + 32, 32767);
+        do Memory.poke(memAddress + 64, -1);
+        do Memory.poke(memAddress + 96, -1);
+        do Memory.poke(memAddress + 128, -128);
+        do Memory.poke(memAddress + 160, -256);
+        do Memory.poke(memAddress + 192, 32512);
+        do Memory.poke(memAddress + 224, 32512);
+        do Memory.poke(memAddress + 256, 16128);
+        do Memory.poke(memAddress + 288, 16128);
+        do Memory.poke(memAddress + 320, 8064);
+        do Memory.poke(memAddress + 352, 3968);
+        do Memory.poke(memAddress + 384, 0);
+        do Memory.poke(memAddress + 416, 0);
+        do Memory.poke(memAddress + 448, 0);
+        do Memory.poke(memAddress + 480, 0);
+        return;
+    }
+
+    method void erase(int x) {
+        var int counter;
+        var int memAddress;
+        let counter = 0;
+
+        // top of jaw
+        let memAddress = 16384 + x;
+        do Memory.poke(memAddress + 0, 0);
+        do Memory.poke(memAddress + 32, 0);
+        do Memory.poke(memAddress + 64, 0);
+        do Memory.poke(memAddress + 96, 0);
+        do Memory.poke(memAddress + 128, 0);
+        do Memory.poke(memAddress + 160, 0);
+        do Memory.poke(memAddress + 192, 0);
+        do Memory.poke(memAddress + 224, 0);
+        do Memory.poke(memAddress + 256, 0);
+        do Memory.poke(memAddress + 288, 0);
+        do Memory.poke(memAddress + 320, 0);
+        do Memory.poke(memAddress + 352, 0);
+        do Memory.poke(memAddress + 384, 0);
+        do Memory.poke(memAddress + 416, 0);
+        do Memory.poke(memAddress + 448, 0);
+        do Memory.poke(memAddress + 480, 0);
+        
+        // mouth
+        while (counter < width) {
+            let memAddress = 16384 + x + counter + 1;
+            do Memory.poke(memAddress + 0, 0);
+            do Memory.poke(memAddress + 32, 0);
+            do Memory.poke(memAddress + 64, 0);
+            do Memory.poke(memAddress + 96, 0);
+            do Memory.poke(memAddress + 128, 0);
+            do Memory.poke(memAddress + 160, 0);
+            do Memory.poke(memAddress + 192, 0);
+            do Memory.poke(memAddress + 224, 0);
+            do Memory.poke(memAddress + 256, 0);
+            do Memory.poke(memAddress + 288, 0);
+            do Memory.poke(memAddress + 320, 0);
+            do Memory.poke(memAddress + 352, 0);
+            do Memory.poke(memAddress + 384, 0);
+            do Memory.poke(memAddress + 416, 0);
+            do Memory.poke(memAddress + 448, 0);
+            do Memory.poke(memAddress + 480, 0);
+            let counter = counter + 1;
+        }
+
+        // bottom of jaw
+        let memAddress = 16384 + x + counter + 1;
+        do Memory.poke(memAddress + 0, 0);
+        do Memory.poke(memAddress + 32, 0);
+        do Memory.poke(memAddress + 64, 0);
+        do Memory.poke(memAddress + 96, 0);
+        do Memory.poke(memAddress + 128, 0);
+        do Memory.poke(memAddress + 160, 0);
+        do Memory.poke(memAddress + 192, 0);
+        do Memory.poke(memAddress + 224, 0);
+        do Memory.poke(memAddress + 256, 0);
+        do Memory.poke(memAddress + 288, 0);
+        do Memory.poke(memAddress + 320, 0);
+        do Memory.poke(memAddress + 352, 0);
+        do Memory.poke(memAddress + 384, 0);
+        do Memory.poke(memAddress + 416, 0);
+        do Memory.poke(memAddress + 448, 0);
+        do Memory.poke(memAddress + 480, 0);
+        return;
+    }
 }
