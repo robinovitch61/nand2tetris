@@ -105,7 +105,39 @@ call Sys.wait 1
 pop temp 0
 push constant 0
 return
-function SpaceTetris.run 5
+function SpaceTetris.updateBullets 3
+push argument 0
+pop pointer 0
+push this 2
+push this 3
+call Math.min 2
+pop local 1
+label WHILE_EXP0
+push local 0
+push local 1
+lt
+not
+if-goto WHILE_END0
+push local 0
+push this 1
+add
+pop pointer 1
+push that 0
+pop local 2
+push local 2
+call Bullet.advanceUp 1
+pop temp 0
+push local 0
+push constant 1
+add
+pop local 0
+goto WHILE_EXP0
+label WHILE_END0
+push constant 0
+pop local 0
+push constant 0
+return
+function SpaceTetris.run 2
 push argument 0
 pop pointer 0
 push constant 0
@@ -167,33 +199,9 @@ label IF_FALSE4
 push pointer 0
 call SpaceTetris.moveAvatar 1
 pop temp 0
-push this 2
-push this 3
-call Math.min 2
-pop local 3
-label WHILE_EXP1
-push local 2
-push local 3
-lt
-not
-if-goto WHILE_END1
-push local 2
-push this 1
-add
-pop pointer 1
-push that 0
-pop local 4
-push local 4
-call Bullet.advanceUp 1
+push pointer 0
+call SpaceTetris.updateBullets 1
 pop temp 0
-push local 2
-push constant 1
-add
-pop local 2
-goto WHILE_EXP1
-label WHILE_END1
-push constant 0
-pop local 2
 goto WHILE_EXP0
 label WHILE_END0
 push constant 0

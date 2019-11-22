@@ -36,7 +36,6 @@ class SpaceTetris {
         let bulletIdx = numBullets - (maxBullets * (numBullets / maxBullets));
         if (numBullets > (maxBullets-1)) {
             let oldBullet = bulletArr[bulletIdx];
-            // do Output.printInt(oldBullet);
             do oldBullet.erase();
         }
         let bulletArr[bulletIdx] = bullet;
@@ -45,12 +44,24 @@ class SpaceTetris {
         return;
     }
 
-    method void run() {
-        var char key;  // the key currently pressed by the user
-        var boolean exit;
+    method void updateBullets() {
         var int idx;
         var int bulletCount;
         var Bullet currBullet;
+
+        let bulletCount = Math.min(numBullets, maxBullets);
+        while (idx < bulletCount) {
+            let currBullet = bulletArr[idx];
+            do currBullet.advanceUp();
+            let idx = idx + 1;
+        }
+        let idx = 0;
+        return;
+    }
+
+    method void run() {
+        var char key;  // the key currently pressed by the user
+        var boolean exit;
         let exit = false;
         
         while (~exit) {
@@ -61,13 +72,7 @@ class SpaceTetris {
             if (key = 132) { let direction = 2; }   // right arrow
             if (key = 32) { do fire(); }
             do moveAvatar();
-            let bulletCount = Math.min(numBullets, maxBullets);
-            while (idx < bulletCount) {
-                let currBullet = bulletArr[idx];
-                do currBullet.advanceUp();
-                let idx = idx + 1;
-            }
-            let idx = 0;
+            do updateBullets();
         }
         return;
     }   
