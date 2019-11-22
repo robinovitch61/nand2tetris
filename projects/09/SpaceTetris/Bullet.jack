@@ -61,10 +61,12 @@ class Bullet {
 	}
 
     method void advanceUp() {
+        var int travelSpeed;
+        let travelSpeed = 2;
         if (y > 0) {
             do Screen.setColor(false);
             do erase();
-            let y = y - (32 * 5);
+            let y = y - (32 * travelSpeed);
             do draw(x + y);
         }
         else {

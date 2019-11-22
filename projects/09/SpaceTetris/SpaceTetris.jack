@@ -9,7 +9,7 @@ class SpaceTetris {
         // x goes from 0 to 31, y from 0 to 15, starting top left
         let avatar = Mooninite.new(0, 15);
         let direction = 0;  // initial state is no movement
-        let maxBullets = 3;
+        let maxBullets = 10;
         let numBullets = 0;
         let bulletArr = Array.new(maxBullets);
         return this;
@@ -30,10 +30,15 @@ class SpaceTetris {
 
     method void fire() {
         var Bullet bullet;
+        var Bullet oldBullet;
         var int bulletIdx;
         let bullet = avatar.fireGun();
-        // do Output.printInt(bullet);
         let bulletIdx = numBullets - (maxBullets * (numBullets / maxBullets));
+        if (numBullets > (maxBullets-1)) {
+            let oldBullet = bulletArr[bulletIdx];
+            // do Output.printInt(oldBullet);
+            do oldBullet.erase();
+        }
         let bulletArr[bulletIdx] = bullet;
         let numBullets = numBullets + 1;
         do Sys.wait(100);
