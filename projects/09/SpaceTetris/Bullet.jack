@@ -1,12 +1,11 @@
 class Bullet {
 
     field int x, y; // top-left corner of sprite
-    static int memAddress;
 
     constructor Bullet new(int Ax, int Ay) {
         let x = Ax;
         let y = 32*16*Ay;
-        do draw(x + y);
+        do draw();
         return this;
     }
 
@@ -16,7 +15,10 @@ class Bullet {
         return;
     }
 
-	method void draw(int location) {
+	method void draw() {
+        var int memAddress;
+        var int location;
+        let location = x + y;
 		let memAddress = 16384 + location;
 		do Memory.poke(memAddress + 0, 384);
 		do Memory.poke(memAddress + 32, 960);
@@ -38,6 +40,7 @@ class Bullet {
 	}
 
 	method void erase() {
+        var int memAddress;
         var int location;
         let location = x + y;
         let memAddress = 16384 + location;
@@ -62,12 +65,12 @@ class Bullet {
 
     method void advanceUp() {
         var int travelSpeed;
-        let travelSpeed = 2;
+        let travelSpeed = 3;
         if (y > 0) {
             do Screen.setColor(false);
             do erase();
             let y = y - (32 * travelSpeed);
-            do draw(x + y);
+            do draw();
         }
         else {
             do dispose();

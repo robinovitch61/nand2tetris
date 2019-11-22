@@ -1,5 +1,5 @@
 function SpaceTetris.new 0
-push constant 5
+push constant 6
 call Memory.alloc 1
 pop pointer 0
 push constant 0
@@ -7,13 +7,16 @@ push constant 15
 call Mooninite.new 2
 pop this 0
 push constant 0
-pop this 4
+pop this 5
 push constant 10
-pop this 3
+pop this 4
 push constant 0
-pop this 2
-push this 3
+pop this 3
+push this 4
 call Array.new 1
+pop this 2
+push constant 0
+call Mouth.new 1
 pop this 1
 push pointer 0
 return
@@ -31,7 +34,7 @@ return
 function SpaceTetris.moveAvatar 0
 push argument 0
 pop pointer 0
-push this 4
+push this 5
 push constant 1
 eq
 if-goto IF_TRUE0
@@ -41,7 +44,7 @@ push this 0
 call Mooninite.moveLeft 1
 pop temp 0
 label IF_FALSE0
-push this 4
+push this 5
 push constant 2
 eq
 if-goto IF_TRUE1
@@ -62,16 +65,16 @@ pop pointer 0
 push this 0
 call Mooninite.fireGun 1
 pop local 0
-push this 2
 push this 3
-push this 2
+push this 4
 push this 3
+push this 4
 call Math.divide 2
 call Math.multiply 2
 sub
 pop local 2
-push this 2
 push this 3
+push this 4
 push constant 1
 sub
 gt
@@ -79,7 +82,7 @@ if-goto IF_TRUE0
 goto IF_FALSE0
 label IF_TRUE0
 push local 2
-push this 1
+push this 2
 add
 pop pointer 1
 push that 0
@@ -89,17 +92,17 @@ call Bullet.erase 1
 pop temp 0
 label IF_FALSE0
 push local 2
-push this 1
+push this 2
 add
 push local 0
 pop temp 0
 pop pointer 1
 push temp 0
 pop that 0
-push this 2
+push this 3
 push constant 1
 add
-pop this 2
+pop this 3
 push constant 100
 call Sys.wait 1
 pop temp 0
@@ -108,8 +111,8 @@ return
 function SpaceTetris.updateBullets 3
 push argument 0
 pop pointer 0
-push this 2
 push this 3
+push this 4
 call Math.min 2
 pop local 1
 label WHILE_EXP0
@@ -119,7 +122,7 @@ lt
 not
 if-goto WHILE_END0
 push local 0
-push this 1
+push this 2
 add
 pop pointer 1
 push that 0
@@ -156,7 +159,7 @@ if-goto IF_TRUE0
 goto IF_FALSE0
 label IF_TRUE0
 push constant 0
-pop this 4
+pop this 5
 label IF_FALSE0
 push local 0
 push constant 81
@@ -175,7 +178,7 @@ if-goto IF_TRUE2
 goto IF_FALSE2
 label IF_TRUE2
 push constant 1
-pop this 4
+pop this 5
 label IF_FALSE2
 push local 0
 push constant 132
@@ -184,7 +187,7 @@ if-goto IF_TRUE3
 goto IF_FALSE3
 label IF_TRUE3
 push constant 2
-pop this 4
+pop this 5
 label IF_FALSE3
 push local 0
 push constant 32

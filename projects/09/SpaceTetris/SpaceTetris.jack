@@ -1,5 +1,6 @@
 class SpaceTetris {
     field Mooninite avatar;
+    field Mouth mouth;
     field Arr bulletArr;
     field int numBullets;
     field int maxBullets;
@@ -12,6 +13,7 @@ class SpaceTetris {
         let maxBullets = 10;
         let numBullets = 0;
         let bulletArr = Array.new(maxBullets);
+        let mouth = Mouth.new(0);
         return this;
     }
 

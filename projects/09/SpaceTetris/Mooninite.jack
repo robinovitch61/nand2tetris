@@ -1,12 +1,11 @@
 class Mooninite {
 
     field int x, y; // top-left corner of sprite
-    static int memAddress;
 
     constructor Mooninite new(int Ax, int Ay) {
         let x = Ax;
         let y = 32*16*Ay;
-        do draw(x + y);
+        do draw();
         return this;
     }
 
@@ -19,7 +18,10 @@ class Mooninite {
         return;
     }
 
-    method void draw(int location) {
+    method void draw() {
+        var int memAddress;
+        var int location;
+        let location = x + y;
         let memAddress = 16384 + location;
         do Memory.poke(memAddress + 0, 0);
         do Memory.poke(memAddress + 32, 1792);
@@ -41,6 +43,7 @@ class Mooninite {
     }
 
     method void erase() {
+        var int memAddress;
         var int location;
         let location = x + y;
         let memAddress = 16384 + location;
@@ -68,7 +71,7 @@ class Mooninite {
             do Screen.setColor(false);
             do erase();
             let x = x - 1;
-            do draw(x + y);
+            do draw();
         }
         return;
     }
@@ -78,7 +81,7 @@ class Mooninite {
             do Screen.setColor(false);
             do erase();
             let x = x + 1;
-            do draw(x + y);
+            do draw();
         }
         return;
     }

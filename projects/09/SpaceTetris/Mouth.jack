@@ -1,0 +1,40 @@
+class Mouth {
+    field int x;
+
+    constructor Mouth new(int Ax) {
+        let x = Ax;
+        do draw();
+        return this;
+    }
+
+    method void draw() {
+        var int width;
+        var int counter;
+        var int memAddress;
+        let width = 2;
+        let x = 1;
+        let counter = 0;
+        while (counter < (width+1)) {
+            let memAddress = 16384 + (x * counter);
+            do Memory.poke(memAddress + 0, -1);
+            do Memory.poke(memAddress + 32, -1);
+            do Memory.poke(memAddress + 64, -1);
+            do Memory.poke(memAddress + 96, -1);
+            do Memory.poke(memAddress + 128, -1);
+            do Memory.poke(memAddress + 160, -1);
+            do Memory.poke(memAddress + 192, -1);
+            do Memory.poke(memAddress + 224, -1);
+            do Memory.poke(memAddress + 256, -1);
+            do Memory.poke(memAddress + 288, -1);
+            do Memory.poke(memAddress + 320, -1);
+            do Memory.poke(memAddress + 352, -1);
+            do Memory.poke(memAddress + 384, -1);
+            do Memory.poke(memAddress + 416, -1);
+            do Memory.poke(memAddress + 448, -1);
+            do Memory.poke(memAddress + 480, -1);
+            let counter = counter + 1;
+        }
+        return;
+    }
+
+}
