@@ -200,10 +200,29 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
 fn find_next(line: &str) -> (&str, usize) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
-                r"(?x)
-                (class\b|constructor\b|function\b|method\b|field\b
-                |static\b|var\b|int\b|char\b|boolean\b|void\b|true\b|false\b
-                |null\b|this\b|let\b|do\b|if\b|else\b|while\b|return\b)"
+                r####"(?x)
+                # keyword
+                ^(\bclass\b|\bconstructor\b|\bfunction\b|\bmethod\b|\bfield\b
+                |\bstatic\b|\bvar\b|\bint\b|\bchar\b|\bboolean\b|\bvoid\b|\btrue\b|\bfalse\b
+                |\bnull\b|\bthis\b|\blet\b|\bdo\b|\bif\b|\belse\b|\bwhile\b|\breturn\b
+
+                # symbol
+                |[{]|[}]|[(]|[)]|\[|\]|[.]|
+                [,]|[;]|[+]|[-]|[*]|[/]|[&]|
+                [|]|[<]|[>]|[=]|[~]
+
+                # integerConstant, 0-32767
+                |[0-9]|[1-8][0-9]|9[0-9]|[1-8][0-9]{2}|9[0-8][0-9]|99[0-9]
+                  |[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-9]
+                  |[12][0-9]{4}|3[01][0-9]{3}|32[0-6][0-9]{2}
+                  |327[0-5][0-9]|3276[0-7]
+
+                # StringConstant
+                |"[^"\n]+"
+
+                # identifier
+                |[a-zA-Z0-9._:]+)
+                "####
             ).unwrap();
     };
 
@@ -215,14 +234,16 @@ fn find_next(line: &str) -> (&str, usize) {
     (token, capture.end())
 }
 
-fn tokenize_line(line: &str, tokens: &Vec<&str>) {
+fn tokenize_line<'line, 'tok>(line: &'line str, tokens: &'tok mut Vec<&'line str>) {
     println!("Tokenizing: {}", line);
     let mut rest = line;
     while rest != "" {
         let (token, idx) = find_next(rest);
-        rest = &rest[idx..];
+        rest = &rest[idx..].trim();
         println!("Found token: {}", token);
-        // tokens.push(token);
+        tokens.push(token);
+        println!("  Tokens: {:?}", tokens);
+        println!("  Tokenizing: {}", rest);
     }
 }
 
@@ -246,13 +267,10 @@ fn main () {
         let mut is_comment = false;
         let mut tokens: Vec<&str> = Vec::new();
         for line in contents.lines() {
-            println!("\nRaw: {}", line);
-            println!("Is comment: {}", is_comment);
             let (clean_line, comment) = remove_comments(line, is_comment);
             is_comment = comment;
-            println!("Cleaned: {}", clean_line);
             if clean_line == "" { continue };
-            tokenize_line(clean_line, &tokens);
+            tokenize_line(clean_line, &mut tokens);
         }
     }
 }

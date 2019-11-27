@@ -5,16 +5,6 @@
 
 // (identical to projects/09/Average/Main.jack)
 
-/** Represents
-a bank account.
-A bank account has an owner, an id, and
-a balance.
-The id values start at
-0 and increment by
-1 each
-time
-a new account is created. */
-
 /** Computes the average of a sequence of integers. */
 class Main {
     function void main() {
