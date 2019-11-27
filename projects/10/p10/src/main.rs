@@ -125,505 +125,82 @@ fn parse_args() -> (Vec<String>, Vec<String>, Vec<fs::File>, Vec<String>) {
 /// # Arguments
 /// 
 /// * `line` - the raw line
-fn remove_comments(line: &str) -> &str {
+fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
     
-    // find the index where comments begin on the line
-    let idx_comment = match line.find("//") {
-        Some(idx) => idx,
-        _ => line.len()
+    // remove stuff like /** STUFF */
+    // and /** 
+    //   STUFF
+    //   STUFF */
+
+    let mut mod_line = line;
+    let mut mod_comment = is_comment;
+    // println!("mod_comment: {}", mod_comment);
+
+    // check if line begins multi-line comment '/**'
+    let idx_start_ml: i32 = match mod_line.find("/**") {
+        Some(idx) => idx as i32,
+        _ => -1
     };
+    // not a comment and "/**" found: keep up to the start of the multiline comment
+    if !mod_comment && idx_start_ml != -1 {
+        mod_line = &mod_line[..idx_start_ml as usize];
+        mod_comment = true;
+    // no "/**" and continues comment from a previous line:
+    } else if mod_comment {
+        // check for end of multi-line comment, '*/'
+        let idx_end_ml: i32 = match line.find("*/") {
+            Some(idx) => idx as i32,
+            _ => -1
+        };
+        // if "*/" found: take rest of line past "*/"
+        if idx_end_ml != -1 {
+            mod_line = &mod_line[idx_end_ml as usize..];
+            mod_comment = false;
+        // no "*/" found, is comment: kill line
+        } else {
+            mod_line = "";
+        }
+    }
+
+    // check for end of multi-line comment, '*/'
+    let idx_end_ml: i32 = match mod_line.find("*/") {
+        Some(idx) => idx as i32,
+        _ => -1
+    };
+    // '*/' found
+    if idx_end_ml != -1 {
+        mod_line = &mod_line[idx_end_ml as usize..];
+        mod_comment = false;
+    }
+
+    // find the index where comments begin on the line
+    let idx_comment = match mod_line.find("//") {
+        Some(idx) => idx,
+        _ => mod_line.len()
+    };
+    // println!("end mod_comment: {}", mod_comment);
 
     // return a reference to the reduced str with no start/end whitespace
     // note that memory contents are the same, just pointer and/or len changed
-    &line[0..idx_comment].trim()
+    (&mod_line[0..idx_comment].trim(), mod_comment)
 }
 
-#[test]
-fn test_stripped_line() {
-    assert_eq!("", remove_comments(""));
-    assert_eq!("", remove_comments("    "));
-    assert_eq!("", remove_comments("//   "));
-    assert_eq!("nand2tetris", remove_comments("nand2tetris   // is so cool"));
-    assert_eq!("nand2tetris is so cool",
-        remove_comments("nand2tetris is so cool // eh?"));
-}
-
-
-/// Checks if VM code line is one of the 9 possible
-/// CArithmetic commands
-/// 
-/// # Arguments
-/// 
-/// * `line` - string slice that holds possible arithmetic command
-fn is_arithmetic(line: &str) -> bool {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^(add|sub|neg|eq|gt|lt|and|or|not)$"
-            ).unwrap();
-    };
-
-    RE.captures(line).is_some()
-}
-
-#[test]
-fn test_is_arithmetic() {
-    assert_eq!(true, is_arithmetic("add"));
-    assert_eq!(true, is_arithmetic("sub"));
-    assert_eq!(true, is_arithmetic("neg"));
-    assert_eq!(true, is_arithmetic("eq"));
-    assert_eq!(true, is_arithmetic("gt"));
-    assert_eq!(true, is_arithmetic("lt"));
-    assert_eq!(true, is_arithmetic("and"));
-    assert_eq!(true, is_arithmetic("or"));
-    assert_eq!(true, is_arithmetic("not"));
-    assert_eq!(false, is_arithmetic("butt"));
-    assert_eq!(false, is_arithmetic("add sub"));
-}
-
-
-/// Writes assembly code for arithmetic commands to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input arithmetic command ("add", "sub", "eq", etc.)
-/// * `cmp_count` - count of previous comparison operations ("eq", "lt", and "gt").
-///     Used to mark jump and continue locations in these operations such that each
-///     label is unique.
-fn write_arithmetic(file: &fs::File, line: &str, cmp_count: i32) {
-
-    match line {
-        "add" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                AM=M-1\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                M=D+M", line=line);
-            write_to_file(file, asm_code)
-        },
-        "sub" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                AM=M-1\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                M=M-D", line=line);
-            write_to_file(file, asm_code)
-        },
-        "neg" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                A=M-1\n\
-                M=-M", line=line);
-            write_to_file(file, asm_code)
-        },
-        "eq" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                AM=M-1\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                D=M-D\n\
-                @EQUAL{cmp_count}\n\
-                D;JEQ\n\
-                @SP\n\
-                A=M-1\n\
-                M=0\n\
-                @CONTINUE{cmp_count}\n\
-                0;JMP\n\
-                (EQUAL{cmp_count})\n\
-                    @SP\n\
-                    A=M-1\n\
-                    M=-1\n\
-                (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            write_to_file(file, asm_code)
-        },
-        "gt" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                AM=M-1\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                D=M-D\n\
-                @GT{cmp_count}\n\
-                D;JGT\n\
-                @SP\n\
-                A=M-1\n\
-                M=0\n\
-                @CONTINUE{cmp_count}\n\
-                0;JMP\n\
-                (GT{cmp_count})\n\
-                    @SP\n\
-                    A=M-1\n\
-                    M=-1\n\
-                (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            write_to_file(file, asm_code)
-        },
-        "lt" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                AM=M-1\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                D=M-D\n\
-                @LT{cmp_count}\n\
-                D;JLT\n\
-                @SP\n\
-                A=M-1\n\
-                M=0\n\
-                @CONTINUE{cmp_count}\n\
-                0;JMP\n\
-                (LT{cmp_count})\n\
-                    @SP\n\
-                    A=M-1\n\
-                    M=-1\n\
-                (CONTINUE{cmp_count})", line=line, cmp_count=cmp_count);
-            write_to_file(file, asm_code)
-        },
-        "and" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                M=M-1\n\
-                A=M\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                M=D&M", line=line);
-            write_to_file(file, asm_code)
-        },
-        "or" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                M=M-1\n\
-                A=M\n\
-                D=M\n\
-                @SP\n\
-                A=M-1\n\
-                M=D|M", line=line);
-            write_to_file(file, asm_code)
-        },
-        "not" => {
-            let asm_code = format!("// {line}\n\
-                @SP\n\
-                A=M-1\n\
-                M=!M", line=line);
-            write_to_file(file, asm_code)
-        },
-        _ => {}
-    }
-}
-
-
-/// Writes assembly code for label commands to output file
-/// TODO: check if need to prepend filename or function?
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input label command
-fn write_label(file: &fs::File, line: &str) {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^label ([a-zA-Z0-9._:]+)$"
-            ).unwrap();
-    };
-
-    let capture = RE.captures(line)
-        .expect("Invalid label command!");
-
-    let label = capture.get(1).unwrap().as_str();
-    let asm_code = format!("// {line}\n\
-        ({label})", line=line, label=label);
-    write_to_file(file, asm_code);
-}
-
-
-/// Writes assembly code for unconditional goto commands to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_goto(file: &fs::File, line: &str) {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^goto ([a-zA-Z0-9._:]+)$"
-            ).unwrap();
-    };
-
-    let capture = RE.captures(line)
-        .expect("Invalid goto command!");
-
-    let label = capture.get(1).unwrap().as_str();
-    let asm_code = format!("// {line}\n\
-        @{label}\n\
-        0;JMP", line=line, label=label);
-    write_to_file(file, asm_code);
-}
-
-
-/// Writes assembly code for conditional goto commands to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_ifgoto(file: &fs::File, line: &str) {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^if-goto ([a-zA-Z0-9._:]+)$"
-            ).unwrap();
-    };
-
-    let capture = RE.captures(line)
-        .expect("Invalid if-goto command!");
-
-    let label = capture.get(1).unwrap().as_str();
-    let asm_code = format!("// {line}\n\
-        @SP\n\
-        AM=M-1\n\
-        D=M\n\
-        @{label}\n\
-        D;JNE", line=line, label=label);
-    write_to_file(file, asm_code);
-}
-
-
-/// Writes assembly code for function declarations to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_function(file: &fs::File, line: &str) {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^function ([a-zA-Z0-9._:]+) ([0-9]+)$"
-            ).unwrap();
-    };
-
-    let capture = RE.captures(line)
-        .expect("Invalid function command!");
-
-    let func_name = capture.get(1).unwrap().as_str();
-    let n_locals = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
-    let mut asm_code = format!("// {line}\n\
-        ({func_name})", line=line, func_name=func_name);
-    let push_0_asy = "\n@SP\n\
-        A=M\n\
-        M=0\n\
-        @SP\n\
-        M=M+1";
-    for _ in 0..n_locals {
-        asm_code.push_str(push_0_asy);
-    }
-    write_to_file(file, asm_code);
-}
-
-
-/// Writes assembly code for return statement to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_return(file: &fs::File, line: &str) {
-    let asm_code = format!("// {line}\n\
-
-        // FRAME = LCL = M[R13]\n\
-        @LCL\n\
-        D=M // D = M[LCL]\n\
-        @R13\n\
-        M=D // M[R13] = M[LCL]\n\
-
-        // RET = *(FRAME-5) = M[R14]\n\
-        @5\n\
-        D=A // D = 5\n\
-        @R13\n\
-        A=M-D // A = LCL - 5\n\
-        D=M // D = M[LCL-5]\n\
-        @R14\n\
-        M=D // M[R14] = M[LCL-5]\n\
-
-        // *ARG = pop()\n\
-        @SP\n\
-        AM=M-1\n\
-        D=M // D = pop()\n\
-        @ARG\n\
-        A=M\n\
-        M=D\n\
-
-        // SP = ARG+1\n\
-        D=A+1\n\
-        @SP\n\
-        M=D // M[SP] = M[ARG] + 1\n\
-
-        // THAT = *(FRAME-1)\n\
-        @R13\n\
-        D=M // D = M[R13] = LCL\n\
-        @1\n\
-        A=D-A // A = LCL - 1\n\
-        D=M // D = M[LCL - 1]\n\
-        @THAT\n\
-        M=D\n\
-
-        // THIS = *(FRAME-2)\n\
-        @R13\n\
-        D=M // D = M[R13] = LCL\n\
-        @2\n\
-        A=D-A // A = LCL - 2\n\
-        D=M // D = M[LCL - 2]\n\
-        @THIS\n\
-        M=D\n\
-
-        // ARG = *(FRAME-3)\n\
-        @R13\n\
-        D=M // D = M[R13] = LCL\n\
-        @3\n\
-        A=D-A // A = LCL - 3\n\
-        D=M // D = M[LCL - 3]\n\
-        @ARG\n\
-        M=D\n\
-
-        // LCL = *(FRAME-4)\n\
-        @R13\n\
-        D=M // D = M[R13] = LCL\n\
-        @4\n\
-        A=D-A // A = LCL - 4\n\
-        D=M // D = M[LCL - 4]\n\
-        @LCL\n\
-        M=D\n\
-
-        // goto RET\n\
-        @R14\n\
-        A=M // A = M[R14] = RET\n\
-        0;JMP", line=line);
-    write_to_file(file, asm_code);
-}
-
-
-/// Writes assembly code for call statement to output file
-/// 
-/// # Arguments
-/// 
-/// * `file` - output file
-/// * `line` - input unconditional goto command
-fn write_call(file: &fs::File, line: &str, call_count: i32) {
-    lazy_static! { // lazy_static ensures compilation only happens once
-        static ref RE : Regex = Regex::new(
-                r"^call ([a-zA-Z0-9._:]+) ([0-9]+)$"
-            ).unwrap();
-    };
-
-    let capture = RE.captures(line)
-        .expect("Invalid call command!");
-
-    let func_name = capture.get(1).unwrap().as_str();
-    let n_args = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
-
-    let asm_code = format!("// {line}\n\
-
-        // push returnaddr\n\
-        @returnaddr{call_count}\n\
-        D=A\n\
-        @SP\n\
-        A=M\n\
-        M=D\n\
-        @SP\n\
-        M=M+1\n\
-
-        // push LCL\n\
-        @LCL\n\
-        D=M\n\
-        @SP\n\
-        A=M\n\
-        M=D\n\
-        @SP\n\
-        M=M+1\n\
-
-        // push ARG\n\
-        @ARG\n\
-        D=M\n\
-        @SP\n\
-        A=M\n\
-        M=D\n\
-        @SP\n\
-        M=M+1\n\
-
-        // push THIS\n\
-        @THIS\n\
-        D=M\n\
-        @SP\n\
-        A=M\n\
-        M=D\n\
-        @SP\n\
-        M=M+1\n\
-
-        // push THAT\n\
-        @THAT\n\
-        D=M\n\
-        @SP\n\
-        A=M\n\
-        M=D\n\
-        @SP\n\
-        M=M+1\n\
-
-        // ARG = SP - n - 5\n\
-        @SP\n\
-        D=M\n\
-        @{n_args}\n\
-        D=D-A\n\
-        @5\n\
-        D=D-A\n\
-        @ARG\n\
-        M=D\n\
-
-        // LCL = SP\n\
-        @SP\n\
-        D=M\n\
-        @LCL\n\
-        M=D\n\
-
-        // goto f\n\
-        @{func_name}\n\
-        0;JMP\n\
-
-        // declare (returnaddr)\n\
-        (returnaddr{call_count})", line=line, n_args=n_args,
-        func_name=func_name, call_count=call_count);
-    write_to_file(file, asm_code);
-}
-
-
-/// Bootstrap to ensure Sys.init gets called first when multiple files
-/// 
-/// # Arguments
-/// 
-/// * output_file: file to bootstrap
-fn bootstrap(output_file: &fs::File) {
-    let set_stackpointer = "\n// Bootstrap\n\n@256\n\
-    D=A\n\
-    @SP\n\
-    M=D".to_string();
-    write_to_file(&output_file, set_stackpointer);
-    write_call(&output_file, "call Sys.init 0", 0);
-}
 
 /// Finds next token in line. Returns token and rest of line.
 fn find_next(line: &str) -> (&str, usize) {
     lazy_static! { // lazy_static ensures compilation only happens once
         static ref RE : Regex = Regex::new(
-                r"(\S+)"
+                r"(?x)
+                (class\b|constructor\b|function\b|method\b|field\b
+                |static\b|var\b|int\b|char\b|boolean\b|void\b|true\b|false\b
+                |null\b|this\b|let\b|do\b|if\b|else\b|while\b|return\b)"
             ).unwrap();
     };
 
-    let capture = RE.find(line).unwrap();
+    let capture = match RE.find(line){
+        Some(cap) => cap,
+        _ => panic!("No token found")
+    };
     let token = &line[capture.start()..capture.end()];
     (token, capture.end())
 }
@@ -634,7 +211,8 @@ fn tokenize_line(line: &str, tokens: &Vec<&str>) {
     while rest != "" {
         let (token, idx) = find_next(rest);
         rest = &rest[idx..];
-        println!("{}", token);
+        println!("Found token: {}", token);
+        // tokens.push(token);
     }
 }
 
@@ -655,9 +233,12 @@ fn main () {
         = (it_file_contents.next(), it_in_paths.next(), it_out_files.next(), it_out_paths.next()) {
 
         // tokenize
+        let mut is_comment = false;
         let mut tokens: Vec<&str> = Vec::new();
         for line in contents.lines() {
-            let clean_line = remove_comments(line);
+            println!("{}", line);
+            let (clean_line, is_comment) = remove_comments(line, is_comment);
+            println!("{}", is_comment);
             if clean_line == "" { continue };
             tokenize_line(clean_line, &tokens);
         }
