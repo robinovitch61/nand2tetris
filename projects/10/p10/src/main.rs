@@ -143,8 +143,18 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
     };
     // not a comment and "/**" found: keep up to the start of the multiline comment
     if !mod_comment && idx_start_ml != -1 {
+        // check for end of multi-line comment, '*/'
+        let idx_end_ml: i32 = match mod_line.find("*/") {
+            Some(idx) => idx as i32,
+            _ => -1
+        };
         mod_line = &mod_line[..idx_start_ml as usize];
-        mod_comment = true;
+        // '*/' found
+        if idx_end_ml != -1 {
+            mod_comment = false;
+        } else {
+            mod_comment = true;
+        }
     // no "/**" and continues comment from a previous line:
     } else if mod_comment {
         // check for end of multi-line comment, '*/'
@@ -169,7 +179,7 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
     };
     // '*/' found
     if idx_end_ml != -1 {
-        mod_line = &mod_line[idx_end_ml as usize..];
+        mod_line = &mod_line[idx_end_ml as usize + 2..];
         mod_comment = false;
     }
 
@@ -236,50 +246,15 @@ fn main () {
         let mut is_comment = false;
         let mut tokens: Vec<&str> = Vec::new();
         for line in contents.lines() {
-            println!("{}", line);
-            let (clean_line, is_comment) = remove_comments(line, is_comment);
-            println!("{}", is_comment);
+            println!("\nRaw: {}", line);
+            println!("Is comment: {}", is_comment);
+            let (clean_line, comment) = remove_comments(line, is_comment);
+            is_comment = comment;
+            println!("Cleaned: {}", clean_line);
             if clean_line == "" { continue };
             tokenize_line(clean_line, &tokens);
         }
     }
 }
-    //         let command_type = get_command_type(clean_line);
-
-    //         match command_type {
-    //             CommandType::CPush => {
-    //                 let (segment, index) = parse_push_pop(clean_line);
-    //                 write_push(&output_file, &in_file_name, clean_line, segment, index);
-    //             },
-    //             CommandType::CPop => {
-    //                 let (segment, index) = parse_push_pop(clean_line);
-    //                 write_pop(&output_file, &in_file_name, clean_line, segment, index);
-    //             },
-    //             CommandType::CArithmetic => {
-    //                 write_arithmetic(&output_file, clean_line, cmp_count);
-    //                 cmp_count += 1;
-    //             },
-    //             CommandType::CLabel => {
-    //                 write_label(&output_file, clean_line);
-    //             },
-    //             CommandType::CGoTo => {
-    //                 write_goto(&output_file, clean_line);
-    //             },
-    //             CommandType::CIfGoTo => {
-    //                 write_ifgoto(&output_file, clean_line);
-    //             },
-    //             CommandType::CFunction => {
-    //                 write_function(&output_file, clean_line);
-    //             },
-    //             CommandType::CCall => {
-    //                 write_call(&output_file, clean_line, call_count);
-    //                 call_count += 1;
-    //             },
-    //             CommandType::CReturn => {
-    //                 write_return(&output_file, clean_line);
-    //             },
-    //         }
-
-    //     }
     //     println!("\nTranslated {:?}\n        -> {:?}\n", in_path, out_path);
     // }
