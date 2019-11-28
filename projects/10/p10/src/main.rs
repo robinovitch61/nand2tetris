@@ -33,14 +33,14 @@ fn get_file_contents(path: &PathBuf, extension: &str) -> String {
 }
 
 
-/// Create and return writable file based on path
-/// 
-/// # Arguments
-/// 
-/// * `path`
-fn create_file(path: &Path) -> fs::File {
-    fs::File::create(&path).unwrap()
-}
+// /// Create and return writable file based on path
+// /// 
+// /// # Arguments
+// /// 
+// /// * `path`
+// fn create_file(path: &Path) -> fs::File {
+//     fs::File::create(&path).unwrap()
+// }
 
 
 /// Write line to file
@@ -79,7 +79,6 @@ fn get_filepaths(dir: &str, extension: &str) -> Vec<PathBuf>{
             for direntry in paths {
                 let path = direntry.unwrap().path();
                 if path.extension().unwrap() == extension {
-                    println!("{:?}", path);
                     ext_paths.push(path);
                 }
             }
@@ -110,7 +109,6 @@ fn parse_args() -> (Vec<String>, Vec<String>, Vec<fs::File>, Vec<String>) {
     let mut output_files: Vec<fs::File> = Vec::new();
     let mut out_path_str : Vec<String> = Vec::new();
     for filepath in vm_filepaths {
-        println!("{:?}", filepath);
         file_contents.push(get_file_contents(&filepath, extension));
         input_files.push(filepath.as_path().to_str().unwrap().to_string());
         let mut xml_filepath = filepath;
@@ -260,7 +258,7 @@ fn find_next(line: &str) -> (&str, usize) {
 }
 
 fn tokenize_line(line: &str, tokens: &mut Vec<String>) {
-    println!("Tokenizing: {}", line);
+    // println!("Tokenizing: {}", line);
     let mut rest = line;
     while rest != "" {
         let (token, idx) = find_next(rest);
@@ -280,7 +278,7 @@ fn write_xml_tree(tokens: &Vec<String>, file: &fs::File) {
 
     while idx < tokens.len() {
         token = &tokens[idx];
-        println!("\nToken: {}", token);
+        // println!("\nToken: {}", token);
 
         if kw_set.contains(token) {
             write_to_file(file, format!("<keyword> {} </keyword>", token));
@@ -332,5 +330,7 @@ fn main () {
         write_to_file(out_file, "<class>".to_string());
         write_xml_tree(&tokens, out_file);
         write_to_file(out_file, "</class>".to_string());
+
+        println!("Wrote {} to {}", in_path, out_path);
     }
 }
