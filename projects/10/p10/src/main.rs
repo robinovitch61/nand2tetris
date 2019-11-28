@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::io::BufReader;
 use std::io::prelude::*;
 use std::env;
+use std::collections::HashSet;
 
 use regex::Regex;
 #[macro_use]
@@ -54,12 +55,13 @@ fn write_to_file(mut file: &fs::File, line: String) {
         .expect("Failed to write line to file!");
 }
 
-/// Get .vm extension filepaths in a directory. If .vm file specified, wraps
+
+/// Get filepaths of given extension in a directory. If file specified, wraps
 /// input filename in vector.
 /// 
 /// # Arguments
 /// 
-/// * vector of pathbufs in dir with .vm extensions
+/// * vector of pathbufs in dir with given extension
 fn get_filepaths(dir: &str, extension: &str) -> Vec<PathBuf>{
 
     match PathBuf::from(dir).extension() {
@@ -73,15 +75,15 @@ fn get_filepaths(dir: &str, extension: &str) -> Vec<PathBuf>{
         _ => {
             let paths = fs::read_dir(dir).unwrap();
 
-            let mut vm_paths: Vec<PathBuf> = Vec::new();
+            let mut ext_paths: Vec<PathBuf> = Vec::new();
             for direntry in paths {
                 let path = direntry.unwrap().path();
                 if path.extension().unwrap() == extension {
                     println!("{:?}", path);
-                    vm_paths.push(path);
+                    ext_paths.push(path);
                 }
             }
-            vm_paths
+            ext_paths
         }
     }
 }
@@ -119,6 +121,7 @@ fn parse_args() -> (Vec<String>, Vec<String>, Vec<fs::File>, Vec<String>) {
 
     (file_contents, input_files, output_files, out_path_str)
 }
+
 
 /// Returns a cleaned string slice after removing comments and white space
 /// 
@@ -196,6 +199,28 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
 }
 
 
+fn get_kw_set() -> HashSet<String> {
+    let mut kw_set = HashSet::new();
+    for kw in &["class", "constructor", "function", "method", "field",
+    "static", "var", "int", "char", "boolean", "void", "true", "false",
+    "null", "this", "let", "do", "if", "else", "while", "return"] {
+        kw_set.insert(kw.to_string());
+    };
+    kw_set
+}
+
+
+fn get_symbol_set() -> HashSet<String> {
+    let mut symb_set = HashSet::new();
+    for symb in &['{', '}', '(', ')', '[', ']', '.',
+    ',', ';', '+', '-', '*', '/', '&', '|', '<', '>',
+    '=', '~'] {
+        symb_set.insert(symb.to_string());
+    };
+    symb_set
+}
+
+
 /// Finds next token in line. Returns token and rest of line.
 fn find_next(line: &str) -> (&str, usize) {
     lazy_static! { // lazy_static ensures compilation only happens once
@@ -213,15 +238,15 @@ fn find_next(line: &str) -> (&str, usize) {
 
                 # integerConstant, 0-32767
                 |[0-9]|[1-8][0-9]|9[0-9]|[1-8][0-9]{2}|9[0-8][0-9]|99[0-9]
-                  |[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-9]
-                  |[12][0-9]{4}|3[01][0-9]{3}|32[0-6][0-9]{2}
-                  |327[0-5][0-9]|3276[0-7]
+                |[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-9]
+                |[12][0-9]{4}|3[01][0-9]{3}|32[0-6][0-9]{2}
+                |327[0-5][0-9]|3276[0-7]
 
                 # StringConstant
                 |"[^"\n]+"
 
                 # identifier
-                |[a-zA-Z0-9._:]+)
+                |[a-zA-Z0-9_:]+)
                 "####
             ).unwrap();
     };
@@ -234,27 +259,57 @@ fn find_next(line: &str) -> (&str, usize) {
     (token, capture.end())
 }
 
-fn tokenize_line<'line, 'tok>(line: &'line str, tokens: &'tok mut Vec<&'line str>) {
+fn tokenize_line(line: &str, tokens: &mut Vec<String>) {
     println!("Tokenizing: {}", line);
     let mut rest = line;
     while rest != "" {
         let (token, idx) = find_next(rest);
         rest = &rest[idx..].trim();
-        println!("Found token: {}", token);
-        tokens.push(token);
-        println!("  Tokens: {:?}", tokens);
-        println!("  Tokenizing: {}", rest);
+        tokens.push(token.to_string());
     }
 }
 
+
+fn write_xml_tree(tokens: &Vec<String>, file: &fs::File) {
+    let kw_set = get_kw_set();
+    let symbol_set = get_symbol_set();
+
+    let mut idx: usize = 0;
+    let mut token;
+    let mut prefix = "  ";
+
+    while idx < tokens.len() {
+        token = &tokens[idx];
+        println!("\nToken: {}", token);
+
+        if kw_set.contains(token) {
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+        } else if symbol_set.contains(token) {
+            write_to_file(file, format!("<symbol> {} </symbol>", token));
+        } else if token.parse::<i32>().is_ok()
+                  && token.parse::<i32>().unwrap() >= 0 
+                  && token.parse::<i32>().unwrap() <= 32767 {
+            write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
+        } else if token.as_bytes()[0] == b'"' && token.as_bytes()[token.len()-1] == b'"' {
+            write_to_file(file, format!("<stringConstant> {} </stringConstant>", token));
+        // } else if IS_DESC_TO_DO {
+            // start_symbol(token);
+            // write_xml_tree(&tokens[idx..], file);
+            // end_symbol(token);
+        } else { // identifier
+            write_to_file(file, format!("<identifier> {} </identifier>", token));
+        }
+        idx += 1;
+    }
+}
 
 /// ********************************
 /// ************* MAIN *************
 /// ********************************
 fn main () {
 
+    // file stuff
     let (file_contents, in_paths, output_files, out_paths) = parse_args();
-
     let mut it_file_contents = file_contents.iter();
     let mut it_in_paths = in_paths.iter();
     let mut it_out_files = output_files.iter();
@@ -265,14 +320,17 @@ fn main () {
 
         // tokenize
         let mut is_comment = false;
-        let mut tokens: Vec<&str> = Vec::new();
+        let mut tokens: Vec<String> = Vec::new();
         for line in contents.lines() {
             let (clean_line, comment) = remove_comments(line, is_comment);
             is_comment = comment;
             if clean_line == "" { continue };
             tokenize_line(clean_line, &mut tokens);
         }
+
+        // xml
+        write_to_file(out_file, "<class>".to_string());
+        write_xml_tree(&tokens, out_file);
+        write_to_file(out_file, "</class>".to_string());
     }
 }
-    //     println!("\nTranslated {:?}\n        -> {:?}\n", in_path, out_path);
-    // }
