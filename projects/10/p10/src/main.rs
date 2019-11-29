@@ -1,6 +1,8 @@
 // Compiler for the Nand2Tetris Jack Programming Language
 // Author: Leo Robinovitch
 
+#![allow(clippy::cognitive_complexity)]
+
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -8,6 +10,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 use std::env;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 
 use regex::Regex;
 #[macro_use]
@@ -268,62 +271,223 @@ fn find_next(line: &str) -> (&str, usize) {
     (token, capture.end())
 }
 
-fn tokenize_line(line: &str, tokens: &mut Vec<String>) {
+fn tokenize_line(line: &str, tokens: &mut VecDeque<String>) {
     // println!("Tokenizing: {}", line);
     let mut rest = line;
     while rest != "" {
         let (token, idx) = find_next(rest);
         rest = &rest[idx..].trim();
-        tokens.push(token.to_string());
+        tokens.push_back(token.to_string());
     }
 }
 
 
-fn write_xml_tree(tokens: &Vec<String>, file: &fs::File) {
+fn is_identifier(token: &String) -> bool{
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r####"(?x)
+                # identifier
+                |[a-zA-Z0-9_:]+
+                "####
+            ).unwrap();
+    };
+
+    match RE.find(token){
+        Some(_) => true,
+        _ => false
+    }
+}
+
+
+fn is_type(token: &String) -> bool{
+    token == "int" || token == "char" || token == "boolean" || is_identifier(token)
+}
+
+
+// fn check_class(tokens: &[String]) {
+//     if !is_identifier(&tokens[0]) {
+//         panic!("Expected identifier after class declaration");
+//     }
+//     if &tokens[1] != "{" {
+//         panic!("Missing '{' after class declaration");
+//     }
+//     // More stuff?
+// }
+
+
+fn get_token(tokens: &mut VecDeque<String>) -> String {
+    if tokens.is_empty() {
+        return "".to_string();
+    }
+    tokens.pop_front().unwrap()
+}
+
+fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) {
     let kw_set = get_kw_set();
     let symbol_set = get_symbol_set();
 
-    let mut idx: usize = 0;
     let mut token;
-    let mut prefix = "  ";
 
-    while idx < tokens.len() {
-        token = &tokens[idx];
+    while !tokens.is_empty() {
+        token = get_token(tokens);
         // println!("\nToken: {}", token);
 
-        if kw_set.contains(token) {
-            write_to_file(file, format!("<keyword> {} </keyword>", token));
-        } else if symbol_set.contains(token) {
-            if token == "<" {
-                println!("{}", token);
-                write_to_file(file, "<symbol> &lt; </symbol>".to_string());
-
-            } else if token == ">" {
-                write_to_file(file, "<symbol> &gt; </symbol>".to_string());
-
-            } else if token == "\"" {
-                write_to_file(file, "<symbol> &quot; </symbol>".to_string());
-
-            } else if token == "&" {
-                write_to_file(file, "<symbol> &amp; </symbol>".to_string());
-
-            } else {
-                write_to_file(file, format!("<symbol> {} </symbol>", token));
+        if parent == "none" {
+            if token != "class" {
+                panic!("Code does not begin with class declaration");
             }
-        } else if token.parse::<i32>().is_ok()
-                  && token.parse::<i32>().unwrap() >= 0 
-                  && token.parse::<i32>().unwrap() <= 32767 {
-            write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
-        } else if token.as_bytes()[0] == b'"' && token.as_bytes()[token.len()-1] == b'"' {
-            write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
-        // } else if IS_DESC_TO_DO {
-            // start_symbol(token);
-            // write_xml_tree(&tokens[idx..], file);
-            // end_symbol(token);
-        } else { // identifier
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            write_xml_tree(tokens, file, "class")
+        } else if parent == "class" {
+            if !is_identifier(&token) {
+                panic!("Did not find valid identifier after 'class' keyword");
+            }
             write_to_file(file, format!("<identifier> {} </identifier>", token));
+            token = get_token(tokens);
+            if token != "{" {
+                panic!("Missing '{' after class declaration");
+            }
+            write_to_file(file, format!("<symbol> {} </symbol>", token));
+            write_xml_tree(tokens, file, "classVarDecs");
+            write_xml_tree(tokens, file, "subroutineDecs");
+            token = get_token(tokens);
+            if token != "}" {
+                panic!("Missing '}' for class");
+            }
+        } else if parent == "classVarDecs" {
+            // leave tokens alone if not ('static | 'field')
+            if tokens[0] == "static" || tokens[0] == "field" {
+                loop {
+                    // ('static | 'field')
+                    token = get_token(tokens);
+                    if token != "static" && token != "field" {
+                        break;
+                    }
+                    write_to_file(file, "<classVarDec>".to_string());
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // type
+                    token = get_token(tokens);
+                    if !is_type(&token) {
+                        panic!("No type specified for class variable");
+                    }
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // varName
+                    token = get_token(tokens);
+                    if !is_identifier(&token) {
+                        panic!("No varName identifier for class variable");
+                    }
+                    write_to_file(file, format!("<identifier> {} </identifier>", token));
+                    // (',', varName)*
+                    loop {
+                        token = get_token(tokens);
+                        if token != "," {
+                            break;
+                        }
+                        write_to_file(file, format!("<symbol> {} </symbol>", token));
+                        token = get_token(tokens);
+                        if !is_identifier(&token) {
+                            panic!("Invalid identifier or extra ',' after class variable declaration");
+                        }
+                        write_to_file(file, format!("<identifier> {} </identifier>", token));
+                    }
+                    // ';'
+                    if token != ";" {
+                        panic!("Missing ';' after class variable declaration");
+                    }
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    write_to_file(file, "</classVarDec>".to_string());
+                }
+            }
+        } else if parent == "subroutineDecs" {
+            // leave tokens alone if not ('constructor' | 'function' | 'method')
+            if tokens[0] == "constructor" || tokens[0] == "function" || tokens[0] == "method" {
+                loop {
+                    // ('constructor' | 'function' | 'method')
+                    token = get_token(tokens);
+                    if token != "constructor" && token != "function" && token != "method" {
+                        break;
+                    }
+                    write_to_file(file, "<subroutineDec>".to_string());
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // ('void' | type)
+                    token = get_token(tokens);
+                    if token != "void" && !is_type(&token) {
+                        panic!("No void or type specified for subroutine");
+                    }
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // subroutineName
+                    token = get_token(tokens);
+                    if !is_identifier(&token) {
+                        panic!("No subroutineName identifier for subroutine");
+                    }
+                    write_to_file(file, format!("<identifier> {} </identifier>", token));
+                    // '('
+                    token = get_token(tokens);
+                    if token != "(" {
+                        panic!("Missing '(' for subroutine");
+                    }
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    // parameterList
+                    write_xml_tree(tokens, file, "parameterList");
+                    // ')'
+                    token = get_token(tokens);
+                    if token != ")" {
+                        panic!("Missing ')' for subroutine");
+                    }
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    // subroutineBody
+                    write_xml_tree(tokens, file, "subroutineBody");
+                    write_to_file(file, "</subroutineDec>".to_string());
+                }
+            }
+        } else if parent == "parameterList" {
+            // TODO
+        } else if parent == "subroutineBody" {
+            // TODO
         }
-        idx += 1;
+
+        // if kw_set.contains(&token) {
+
+        //     if token == "class" {
+        //         // check_class(&tokens);
+        //     }
+        //     if token == "constructor" || token == "function" || token == "method" {
+        //         write_to_file(file, "<subroutineDec>".to_string());
+        //         write_to_file(file, format!("<keyword> {} </keyword>", token));
+        //         write_xml_tree(tokens, file, "subroutineDec");
+        //         write_to_file(file, "</subroutineDec>".to_string());
+        //     }
+        //     write_to_file(file, format!("<keyword> {} </keyword>", token));
+
+        // } else if symbol_set.contains(&token) {
+        //     if token == "<" {
+        //         write_to_file(file, "<symbol> &lt; </symbol>".to_string());
+
+        //     } else if token == ">" {
+        //         write_to_file(file, "<symbol> &gt; </symbol>".to_string());
+
+        //     } else if token == "\"" {
+        //         write_to_file(file, "<symbol> &quot; </symbol>".to_string());
+
+        //     } else if token == "&" {
+        //         write_to_file(file, "<symbol> &amp; </symbol>".to_string());
+
+        //     } else {
+        //         write_to_file(file, format!("<symbol> {} </symbol>", token));
+        //     }
+        // } else if token.parse::<i32>().is_ok()
+        //           && token.parse::<i32>().unwrap() >= 0 
+        //           && token.parse::<i32>().unwrap() <= 32767 {
+        //     write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
+        // } else if token.as_bytes()[0] == b'"' && token.as_bytes()[token.len()-1] == b'"' {
+        //     write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
+        // // } else if IS_DESC_TO_DO {
+        //     // start_symbol(token);
+        //     // write_xml_tree(&tokens, file);
+        //     // end_symbol(token);
+        // } else { // identifier
+        //     write_to_file(file, format!("<identifier> {} </identifier>", token));
+        // }
     }
 }
 
@@ -344,7 +508,7 @@ fn main () {
 
         // tokenize
         let mut is_comment = false;
-        let mut tokens: Vec<String> = Vec::new();
+        let mut tokens: VecDeque<String> = VecDeque::new();
         for line in contents.lines() {
             let (clean_line, comment) = remove_comments(line, is_comment);
             is_comment = comment;
@@ -353,9 +517,9 @@ fn main () {
         }
 
         // xml
-        write_to_file(out_file, "<tokens>".to_string());
-        write_xml_tree(&tokens, out_file);
-        write_to_file(out_file, "</tokens>".to_string());
+        write_to_file(out_file, "<class>".to_string());
+        write_xml_tree(&mut tokens, out_file, "none");
+        write_to_file(out_file, "</class>".to_string());
 
         println!("Wrote {} to {}", in_path, out_path);
     }
