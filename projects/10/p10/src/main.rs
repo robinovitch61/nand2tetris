@@ -109,11 +109,22 @@ fn parse_args() -> (Vec<String>, Vec<String>, Vec<fs::File>, Vec<String>) {
     let mut output_files: Vec<fs::File> = Vec::new();
     let mut out_path_str : Vec<String> = Vec::new();
     for filepath in vm_filepaths {
+        // get file contents
         file_contents.push(get_file_contents(&filepath, extension));
+
+        // save filepath string
         input_files.push(filepath.as_path().to_str().unwrap().to_string());
+
+        // generate xml output with modified filename
         let mut xml_filepath = filepath;
+        let mut xml_file_name = xml_filepath.file_name().unwrap().to_str().unwrap().to_string();
+        xml_file_name = xml_file_name[..(xml_file_name.len() - extension.len() - 1)].to_string();
+        xml_file_name.push_str("_gen");
+        xml_filepath.set_file_name(xml_file_name);
         xml_filepath.set_extension("xml");
         output_files.push(fs::File::create(&xml_filepath).unwrap());
+
+        // save output filepath string
         out_path_str.push(xml_filepath.as_path().to_str().unwrap().to_string());
     }
 
@@ -138,7 +149,7 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
     // println!("mod_comment: {}", mod_comment);
 
     // check if line begins multi-line comment '/**'
-    let idx_start_ml: i32 = match mod_line.find("/**") {
+    let idx_start_ml: i32 = match mod_line.find("/**") { // TO DO: /* STUFF */
         Some(idx) => idx as i32,
         _ => -1
     };
@@ -283,13 +294,28 @@ fn write_xml_tree(tokens: &Vec<String>, file: &fs::File) {
         if kw_set.contains(token) {
             write_to_file(file, format!("<keyword> {} </keyword>", token));
         } else if symbol_set.contains(token) {
-            write_to_file(file, format!("<symbol> {} </symbol>", token));
+            if token == "<" {
+                println!("{}", token);
+                write_to_file(file, "<symbol> &lt; </symbol>".to_string());
+
+            } else if token == ">" {
+                write_to_file(file, "<symbol> &gt; </symbol>".to_string());
+
+            } else if token == "\"" {
+                write_to_file(file, "<symbol> &quot; </symbol>".to_string());
+
+            } else if token == "&" {
+                write_to_file(file, "<symbol> &amp; </symbol>".to_string());
+
+            } else {
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+            }
         } else if token.parse::<i32>().is_ok()
                   && token.parse::<i32>().unwrap() >= 0 
                   && token.parse::<i32>().unwrap() <= 32767 {
             write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
         } else if token.as_bytes()[0] == b'"' && token.as_bytes()[token.len()-1] == b'"' {
-            write_to_file(file, format!("<stringConstant> {} </stringConstant>", token));
+            write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
         // } else if IS_DESC_TO_DO {
             // start_symbol(token);
             // write_xml_tree(&tokens[idx..], file);
@@ -327,9 +353,9 @@ fn main () {
         }
 
         // xml
-        write_to_file(out_file, "<class>".to_string());
+        write_to_file(out_file, "<tokens>".to_string());
         write_xml_tree(&tokens, out_file);
-        write_to_file(out_file, "</class>".to_string());
+        write_to_file(out_file, "</tokens>".to_string());
 
         println!("Wrote {} to {}", in_path, out_path);
     }
