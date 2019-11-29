@@ -374,13 +374,11 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 "Missing closing '}' for class");
         } else if parent == "classVarDecs" {
             loop {
-                // ('static | 'field')
-                // if no classVarDec, leave tokens alone and continue
                 if tokens[0] != "static" && tokens[0] != "field" {
                     break;
                 }
-                // else, start classVarDec
                 write_to_file(file, "<classVarDec>".to_string());
+                // ('static | 'field')
                 token = get_token(tokens);
                 write_to_file(file, format!("<keyword> {} </keyword>", token));
                 // type
@@ -391,13 +389,13 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                     "Misisng or invalid identifier for class variable");
                 // (',' varName)*
                 loop {
-                    // ','
                     if tokens[0] != "," { break }
+                    // ','
                     token = get_token(tokens);
                     write_to_file(file, format!("<symbol> {} </symbol>", token));
                     // varName
                     write_identifier(tokens, file,
-                        "Missing or invalid identifier or extra ',' for class variable");
+                        "Missing or invalid identifier or extra ',' in class variable");
                 }
                 // ';'
                 write_symbol(";", tokens, file,
@@ -406,32 +404,30 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
             }
         } else if parent == "subroutineDecs" {
             loop {
-                // ('constructor' | 'function' | 'method')
-                // if no subroutineDec, leave tokens alone and continue
                 if tokens[0] != "constructor" && tokens[0] != "function" && tokens[0] != "method" {
                     break;
                 }
-                // else, start subroutineDec
                 write_to_file(file, "<subroutineDec>".to_string());
+                // ('constructor' | 'function' | 'method')
                 token = get_token(tokens);
                 write_to_file(file, format!("<keyword> {} </keyword>", token));
                 // ('void' | type)
                 token = get_token(tokens);
                 if token != "void" && !is_type(&token) {
-                    panic!("Missing or invalid type (or 'void') specified for subroutine");
+                    panic!("Missing or invalid type (or 'void') specified in subroutine");
                 }
                 write_to_file(file, format!("<keyword> {} </keyword>", token));
                 // subroutineName
                 write_identifier(tokens, file,
-                    "Missing or invalid identifier for subroutine");
+                    "Missing or invalid identifier in subroutine");
                 // '('
                 write_symbol("(", tokens, file,
-                    "Missing '(' for subroutine");   
+                    "Missing '(' in subroutine");   
                 // parameterList
                 write_xml_tree(tokens, file, "parameterList");
                 // ')'
                 write_symbol("(", tokens, file,
-                    "Missing ')' for subroutine");  
+                    "Missing ')' in subroutine");  
                 // subroutineBody
                 write_xml_tree(tokens, file, "subroutineBody");
                 write_to_file(file, "</subroutineDec>".to_string());
@@ -444,12 +440,9 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 write_type(tokens, file,
                     "Missing or invalid type specified for parameter");
                 // varName
-                token = get_token(tokens);
-                if !is_identifier(&token) {
-                    panic!("Missing or invalid identifier for parameter");
-                }
-                write_to_file(file, format!("<identifier> {} </identifier>", token));
-                // (',', type varName)*
+                write_identifier(tokens, file, 
+                    "Missing or invalid identifier for parameter");
+                // (',' type varName)*
                 loop {
                     if tokens[0] != "," { break; }
                     // ','
@@ -481,51 +474,174 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 "Missing '}' in subroutine body"); 
             write_to_file(file, "</subroutineBody>".to_string());
         } else if parent == "varDecs" {
-            // 'var'
-        } else if parent == "statements"
-
-        // if kw_set.contains(&token) {
-
-        //     if token == "class" {
-        //         // check_class(&tokens);
-        //     }
-        //     if token == "constructor" || token == "function" || token == "method" {
-        //         write_to_file(file, "<subroutineDec>".to_string());
-        //         write_to_file(file, format!("<keyword> {} </keyword>", token));
-        //         write_xml_tree(tokens, file, "subroutineDec");
-        //         write_to_file(file, "</subroutineDec>".to_string());
-        //     }
-        //     write_to_file(file, format!("<keyword> {} </keyword>", token));
-
-        // } else if symbol_set.contains(&token) {
-        //     if token == "<" {
-        //         write_to_file(file, "<symbol> &lt; </symbol>".to_string());
-
-        //     } else if token == ">" {
-        //         write_to_file(file, "<symbol> &gt; </symbol>".to_string());
-
-        //     } else if token == "\"" {
-        //         write_to_file(file, "<symbol> &quot; </symbol>".to_string());
-
-        //     } else if token == "&" {
-        //         write_to_file(file, "<symbol> &amp; </symbol>".to_string());
-
-        //     } else {
-        //         write_to_file(file, format!("<symbol> {} </symbol>", token));
-        //     }
-        // } else if token.parse::<i32>().is_ok()
-        //           && token.parse::<i32>().unwrap() >= 0 
-        //           && token.parse::<i32>().unwrap() <= 32767 {
-        //     write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
-        // } else if token.as_bytes()[0] == b'"' && token.as_bytes()[token.len()-1] == b'"' {
-        //     write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
-        // // } else if IS_DESC_TO_DO {
-        //     // start_symbol(token);
-        //     // write_xml_tree(&tokens, file);
-        //     // end_symbol(token);
-        // } else { // identifier
-        //     write_to_file(file, format!("<identifier> {} </identifier>", token));
-        // }
+            loop {
+                if tokens[0] != "var" { break; }
+                write_to_file(file, "<varDec>".to_string());
+                // 'var'
+                token = get_token(tokens);
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+                // type
+                write_type(tokens, file,
+                    "Missing or invalid type in variable declaration");
+                // varName
+                write_identifier(tokens, file,
+                    "Missing or invalid identifier in variable declaration");
+                // (',' varName)*
+                loop {
+                    if tokens[0] != "," { break }
+                    // ','
+                    token = get_token(tokens);
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    // varName
+                    write_identifier(tokens, file,
+                        "Missing or invalid identifier or extra ',' in variable declaration");
+                }
+                write_symbol(";", tokens, file,
+                    "Missing ';' in variable declaration");
+                write_to_file(file, "</varDec>".to_string());
+            }
+        } else if parent == "statements" {
+            if tokens[0] == "let" || tokens[0] == "if" || tokens[0] == "while"
+            || tokens[0] == "do" || tokens[0] == "return" {
+                write_to_file(file, "<statements>".to_string());
+            }
+            loop {
+                if tokens[0] != "let" && tokens[0] != "if" && tokens[0] != "while"
+                && tokens[0] != "do" && tokens[0] != "return" {
+                    break;
+                }
+                if tokens[0] == "let" {
+                    // letStatement
+                    write_xml_tree(tokens, file, "letStatement");
+                } else if tokens[0] == "if" {
+                    // ifStatement
+                    write_xml_tree(tokens, file, "ifStatement");
+                } else if tokens[0] == "while" {
+                    // whileStatement
+                    write_xml_tree(tokens, file, "whileStatement");
+                } else if tokens[0] == "do" {
+                    // doStatement
+                    write_xml_tree(tokens, file, "doStatement");
+                } else {
+                    // returnStatement
+                    write_xml_tree(tokens, file, "returnStatement");
+                }
+            }
+            write_to_file(file, "</statements>".to_string());
+        } else if parent == "letStatement" {
+            write_to_file(file, "<letStatement>".to_string());
+            // 'let'
+            token = get_token(tokens);
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            // varName
+            write_identifier(tokens, file,
+                "Missing or invalid identifier in let statement");
+            // ('[' expression ']')?
+            if tokens[0] == "[" {
+                // '['
+                token = get_token(tokens);
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+                // expression
+                write_xml_tree(tokens, file, "expression");
+                // ']'
+                write_symbol("]", tokens, file,
+                    "Missing ']' for expression in let statement");
+            }
+            // '='
+            write_symbol("=", tokens, file,
+                "Missing '=' in let statement");
+            // expression
+            write_xml_tree(tokens, file, "expression");
+            // ';'
+            write_symbol(";", tokens, file,
+                "Missing ';' in let statement");
+            write_to_file(file, "</letStatement>".to_string());
+        } else if parent == "ifStatement" {
+            write_to_file(file, "<ifStatement>".to_string());
+            // 'if'
+            token = get_token(tokens);
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            // '('
+            write_symbol("(", tokens, file,
+                "Missing '(' for conditional expression in if statement");
+            // expression
+            write_xml_tree(tokens, file, "expression");
+            // ')'
+            write_symbol(")", tokens, file,
+                "Missing ')' for conditional expression in if statement");
+            // '{'
+            write_symbol("{", tokens, file,
+                "Missing '{' in if statement");
+            // statements
+            write_xml_tree(tokens, file, "statements");
+            // '}'
+            write_symbol("}", tokens, file,
+                "Missing '}' in if statement");
+            // ('else' '{' statements '}')?
+            if tokens[0] == "else" {
+                // 'else'
+                token = get_token(tokens);
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+                // '{'
+                write_symbol("{", tokens, file,
+                    "Missing '{' in else part of if statement");
+                // statements
+                write_xml_tree(tokens, file, "statements");
+                // '}'
+                write_symbol("}", tokens, file,
+                    "Missing '}' in else part of if statement");
+            }
+            write_to_file(file, "</ifStatement>".to_string());
+        } else if parent == "whileStatement" {
+            write_to_file(file, "<whileStatement>".to_string());
+            // 'while'
+            token = get_token(tokens);
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            // '('
+            write_symbol("(", tokens, file,
+                "Missing '(' for conditional expression in while statement");
+            // expression
+            write_xml_tree(tokens, file, "expression");
+            // ')'
+            write_symbol(")", tokens, file,
+                "Missing ')' for conditional expression in while statement");
+            // '{'
+            write_symbol("{", tokens, file,
+                "Missing '{' in while statement");
+            // statements
+            write_xml_tree(tokens, file, "statements");
+            // '}'
+            write_symbol("}", tokens, file,
+                "Missing '}' in while statement");
+            write_to_file(file, "</whileStatement>".to_string());
+        } else if parent == "doStatement" {
+            write_to_file(file, "<doStatement>".to_string());
+            // 'do'
+            token = get_token(tokens);
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            // subroutineCall
+            write_xml_tree(tokens, file, "subroutineCall");
+            // ';'
+            write_symbol(";", tokens, file,
+                "Missing ';' in do statement");
+            write_to_file(file, "</doStatement>".to_string());
+        } else if parent == "returnStatement" {
+            write_to_file(file, "<returnStatement>".to_string());
+            // 'return'
+            token = get_token(tokens);
+            write_to_file(file, format!("<keyword> {} </keyword>", token));
+            // expression?
+            if tokens[0] != ";" {
+                // expression
+                write_xml_tree(tokens, file, "expression");
+            }
+            // ';'
+            write_symbol(";", tokens, file,
+                "Missing ';' in return statement");
+            write_to_file(file, "</returnStatement>".to_string());
+        } else if parent == "expression" {
+        } else if parent == "subroutineCall" {
+        }
     }
 }
 
