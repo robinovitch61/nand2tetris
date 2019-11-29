@@ -271,6 +271,7 @@ fn find_next(line: &str) -> (&str, usize) {
     (token, capture.end())
 }
 
+
 fn tokenize_line(line: &str, tokens: &mut VecDeque<String>) {
     // println!("Tokenizing: {}", line);
     let mut rest = line;
@@ -304,17 +305,6 @@ fn is_type(token: &String) -> bool{
 }
 
 
-// fn check_class(tokens: &[String]) {
-//     if !is_identifier(&tokens[0]) {
-//         panic!("Expected identifier after class declaration");
-//     }
-//     if &tokens[1] != "{" {
-//         panic!("Missing '{' after class declaration");
-//     }
-//     // More stuff?
-// }
-
-
 fn get_token(tokens: &mut VecDeque<String>) -> String {
     if tokens.is_empty() {
         return "".to_string();
@@ -322,129 +312,177 @@ fn get_token(tokens: &mut VecDeque<String>) -> String {
     tokens.pop_front().unwrap()
 }
 
+
+fn write_symbol(symbol: &str, tokens: &mut VecDeque<String>, file: &fs::File, err: &str) {
+    let token = get_token(tokens);
+    let err = err.to_string();
+    if token != symbol {
+        panic!(err);
+    }
+    write_to_file(file, format!("<symbol> {} </symbol>", token));
+}
+
+
+fn write_type(tokens: &mut VecDeque<String>, file: &fs::File, err: &str) {
+    let token = get_token(tokens);
+    let err = err.to_string();
+    if !is_type(&token) {
+        panic!(err);
+    }
+    write_to_file(file, format!("<keyword> {} </keyword>", token));
+}
+
+
+fn write_identifier(tokens: &mut VecDeque<String>, file: &fs::File, err: &str) {
+    let token = get_token(tokens);
+    let err = err.to_string();
+    if !is_identifier(&token) {
+        panic!(err);
+    }
+    write_to_file(file, format!("<identifier> {} </identifier>", token));
+}
+
+
 fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) {
     let kw_set = get_kw_set();
     let symbol_set = get_symbol_set();
-
     let mut token;
 
     while !tokens.is_empty() {
-        token = get_token(tokens);
-        // println!("\nToken: {}", token);
-
-        if parent == "none" {
+        if parent == "class" {
+            // 'class'
+            token = get_token(tokens);
             if token != "class" {
-                panic!("Code does not begin with class declaration");
+                panic!("File does not begin with class declaration");
             }
             write_to_file(file, format!("<keyword> {} </keyword>", token));
-            write_xml_tree(tokens, file, "class")
-        } else if parent == "class" {
+            // className
+            token = get_token(tokens);
             if !is_identifier(&token) {
-                panic!("Did not find valid identifier after 'class' keyword");
+                panic!("Missing valid className identifier");
             }
             write_to_file(file, format!("<identifier> {} </identifier>", token));
-            token = get_token(tokens);
-            if token != "{" {
-                panic!("Missing '{' after class declaration");
-            }
-            write_to_file(file, format!("<symbol> {} </symbol>", token));
+            // '{'
+            write_symbol("{", tokens, file,
+                "Missing '{' after className identifier");
+            // 'classVarDecs'
             write_xml_tree(tokens, file, "classVarDecs");
+            // 'subroutineDecs'
             write_xml_tree(tokens, file, "subroutineDecs");
-            token = get_token(tokens);
-            if token != "}" {
-                panic!("Missing '}' for class");
-            }
+            // '}'
+            write_symbol("{", tokens, file,
+                "Missing closing '}' for class");
         } else if parent == "classVarDecs" {
-            // leave tokens alone if not ('static | 'field')
-            if tokens[0] == "static" || tokens[0] == "field" {
+            loop {
+                // ('static | 'field')
+                // if no classVarDec, leave tokens alone and continue
+                if tokens[0] != "static" && tokens[0] != "field" {
+                    break;
+                }
+                // else, start classVarDec
+                write_to_file(file, "<classVarDec>".to_string());
+                token = get_token(tokens);
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+                // type
+                write_type(tokens, file,
+                    "Missing or invalid type specified for class variable");
+                // varName
+                write_identifier(tokens, file,
+                    "Misisng or invalid identifier for class variable");
+                // (',' varName)*
                 loop {
-                    // ('static | 'field')
+                    // ','
+                    if tokens[0] != "," { break }
                     token = get_token(tokens);
-                    if token != "static" && token != "field" {
-                        break;
-                    }
-                    write_to_file(file, "<classVarDec>".to_string());
-                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    // varName
+                    write_identifier(tokens, file,
+                        "Missing or invalid identifier or extra ',' for class variable");
+                }
+                // ';'
+                write_symbol(";", tokens, file,
+                    "Missing ';' after class variable declaration");   
+                write_to_file(file, "</classVarDec>".to_string());
+            }
+        } else if parent == "subroutineDecs" {
+            loop {
+                // ('constructor' | 'function' | 'method')
+                // if no subroutineDec, leave tokens alone and continue
+                if tokens[0] != "constructor" && tokens[0] != "function" && tokens[0] != "method" {
+                    break;
+                }
+                // else, start subroutineDec
+                write_to_file(file, "<subroutineDec>".to_string());
+                token = get_token(tokens);
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+                // ('void' | type)
+                token = get_token(tokens);
+                if token != "void" && !is_type(&token) {
+                    panic!("Missing or invalid type (or 'void') specified for subroutine");
+                }
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+                // subroutineName
+                write_identifier(tokens, file,
+                    "Missing or invalid identifier for subroutine");
+                // '('
+                write_symbol("(", tokens, file,
+                    "Missing '(' for subroutine");   
+                // parameterList
+                write_xml_tree(tokens, file, "parameterList");
+                // ')'
+                write_symbol("(", tokens, file,
+                    "Missing ')' for subroutine");  
+                // subroutineBody
+                write_xml_tree(tokens, file, "subroutineBody");
+                write_to_file(file, "</subroutineDec>".to_string());
+            }
+        } else if parent == "parameterList" {
+            // leave tokens alone if no parameters
+            if tokens[0] != ")" {
+                write_to_file(file, "<parameterList>".to_string());
+                // type
+                write_type(tokens, file,
+                    "Missing or invalid type specified for parameter");
+                // varName
+                token = get_token(tokens);
+                if !is_identifier(&token) {
+                    panic!("Missing or invalid identifier for parameter");
+                }
+                write_to_file(file, format!("<identifier> {} </identifier>", token));
+                // (',', type varName)*
+                loop {
+                    if tokens[0] != "," { break; }
+                    // ','
+                    token = get_token(tokens);
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
                     // type
-                    token = get_token(tokens);
-                    if !is_type(&token) {
-                        panic!("No type specified for class variable");
-                    }
-                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    write_type(tokens, file,
+                        "Missing or invalid type specified for parameter");
                     // varName
                     token = get_token(tokens);
                     if !is_identifier(&token) {
-                        panic!("No varName identifier for class variable");
+                        panic!("Invalid identifier or extra ',' in parameters");
                     }
                     write_to_file(file, format!("<identifier> {} </identifier>", token));
-                    // (',', varName)*
-                    loop {
-                        token = get_token(tokens);
-                        if token != "," {
-                            break;
-                        }
-                        write_to_file(file, format!("<symbol> {} </symbol>", token));
-                        token = get_token(tokens);
-                        if !is_identifier(&token) {
-                            panic!("Invalid identifier or extra ',' after class variable declaration");
-                        }
-                        write_to_file(file, format!("<identifier> {} </identifier>", token));
-                    }
-                    // ';'
-                    if token != ";" {
-                        panic!("Missing ';' after class variable declaration");
-                    }
-                    write_to_file(file, format!("<symbol> {} </symbol>", token));
-                    write_to_file(file, "</classVarDec>".to_string());
                 }
+                write_to_file(file, "</parameterList>".to_string());
             }
-        } else if parent == "subroutineDecs" {
-            // leave tokens alone if not ('constructor' | 'function' | 'method')
-            if tokens[0] == "constructor" || tokens[0] == "function" || tokens[0] == "method" {
-                loop {
-                    // ('constructor' | 'function' | 'method')
-                    token = get_token(tokens);
-                    if token != "constructor" && token != "function" && token != "method" {
-                        break;
-                    }
-                    write_to_file(file, "<subroutineDec>".to_string());
-                    write_to_file(file, format!("<keyword> {} </keyword>", token));
-                    // ('void' | type)
-                    token = get_token(tokens);
-                    if token != "void" && !is_type(&token) {
-                        panic!("No void or type specified for subroutine");
-                    }
-                    write_to_file(file, format!("<keyword> {} </keyword>", token));
-                    // subroutineName
-                    token = get_token(tokens);
-                    if !is_identifier(&token) {
-                        panic!("No subroutineName identifier for subroutine");
-                    }
-                    write_to_file(file, format!("<identifier> {} </identifier>", token));
-                    // '('
-                    token = get_token(tokens);
-                    if token != "(" {
-                        panic!("Missing '(' for subroutine");
-                    }
-                    write_to_file(file, format!("<symbol> {} </symbol>", token));
-                    // parameterList
-                    write_xml_tree(tokens, file, "parameterList");
-                    // ')'
-                    token = get_token(tokens);
-                    if token != ")" {
-                        panic!("Missing ')' for subroutine");
-                    }
-                    write_to_file(file, format!("<symbol> {} </symbol>", token));
-                    // subroutineBody
-                    write_xml_tree(tokens, file, "subroutineBody");
-                    write_to_file(file, "</subroutineDec>".to_string());
-                }
-            }
-        } else if parent == "parameterList" {
-            // TODO
         } else if parent == "subroutineBody" {
-            // TODO
-        }
+            write_to_file(file, "<subroutineBody>".to_string());
+            // '{'
+            write_symbol("{", tokens, file,
+                "Missing '{' in subroutine body"); 
+            // varDec*
+            write_xml_tree(tokens, file, "varDecs");
+            // statements
+            write_xml_tree(tokens, file, "statements");
+            // '}'
+            write_symbol("}", tokens, file,
+                "Missing '}' in subroutine body"); 
+            write_to_file(file, "</subroutineBody>".to_string());
+        } else if parent == "varDecs" {
+            // 'var'
+        } else if parent == "statements"
 
         // if kw_set.contains(&token) {
 
@@ -518,7 +556,7 @@ fn main () {
 
         // xml
         write_to_file(out_file, "<class>".to_string());
-        write_xml_tree(&mut tokens, out_file, "none");
+        write_xml_tree(&mut tokens, out_file, "class");
         write_to_file(out_file, "</class>".to_string());
 
         println!("Wrote {} to {}", in_path, out_path);
