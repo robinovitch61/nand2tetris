@@ -36,16 +36,6 @@ fn get_file_contents(path: &PathBuf, extension: &str) -> String {
 }
 
 
-// /// Create and return writable file based on path
-// /// 
-// /// # Arguments
-// /// 
-// /// * `path`
-// fn create_file(path: &Path) -> fs::File {
-//     fs::File::create(&path).unwrap()
-// }
-
-
 /// Write line to file
 /// 
 /// # Arguments
@@ -218,17 +208,6 @@ fn get_kw_set() -> HashSet<String> {
     };
     kw_set
 }
-
-
-// fn get_symbol_set() -> HashSet<String> {
-//     let mut symb_set = HashSet::new();
-//     for symb in &['{', '}', '(', ')', '[', ']', '.',
-//     ',', ';', '+', '-', '*', '/', '&', '|', '<', '>',
-//     '=', '~'] {
-//         symb_set.insert(symb.to_string());
-//     };
-//     symb_set
-// }
 
 
 /// Finds next token in line. Returns token and rest of line.
@@ -708,6 +687,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
             write_xml_tree(tokens, file, "term");
             // (op term)*
             loop {
+                println!("{:?} {:?} {:?} {:?}", parent, tokens[0], tokens[1], tokens[2]);
                 if !is_op(&tokens[0]) { break; }
                 // op
                 write_symbol("next", tokens, file, "");
@@ -753,6 +733,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 // expression
                 write_xml_tree(tokens, file, "expression");
                 // ')'
+                write_symbol(")", tokens, file, "");
             } else if is_unaryOp(&tokens[0]) {
                 // unaryOp
                 write_symbol("next", tokens, file, "");
@@ -834,6 +815,8 @@ fn main () {
     while let (Some(contents), Some(in_path), Some(out_file), Some(out_path))
         = (it_file_contents.next(), it_in_paths.next(), it_out_files.next(), it_out_paths.next()) {
 
+        println!("Tokenizing {}...", in_path);
+
         // tokenize
         let mut is_comment = false;
         let mut tokens: VecDeque<String> = VecDeque::new();
@@ -843,6 +826,8 @@ fn main () {
             if clean_line == "" { continue };
             tokenize_line(clean_line, &mut tokens);
         }
+
+        println!("Creating xml for {}...", in_path);
 
         // xml
         write_to_file(out_file, "<class>".to_string());
