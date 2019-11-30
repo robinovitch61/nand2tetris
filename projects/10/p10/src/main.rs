@@ -149,7 +149,6 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
 
     let mut mod_line = line;
     let mut mod_comment = is_comment;
-    // println!("mod_comment: {}", mod_comment);
 
     // check if line begins multi-line comment '/**'
     let idx_start_ml: i32 = match mod_line.find("/**") { // TO DO: /* STUFF */
@@ -203,7 +202,6 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
         Some(idx) => idx,
         _ => mod_line.len()
     };
-    // println!("end mod_comment: {}", mod_comment);
 
     // return a reference to the reduced str with no start/end whitespace
     // note that memory contents are the same, just pointer and/or len changed
@@ -273,7 +271,6 @@ fn find_next(line: &str) -> (&str, usize) {
 
 
 fn tokenize_line(line: &str, tokens: &mut VecDeque<String>) {
-    // println!("Tokenizing: {}", line);
     let mut rest = line;
     while rest != "" {
         let (token, idx) = find_next(rest);
@@ -288,7 +285,7 @@ fn is_identifier(token: &String) -> bool{
         static ref RE : Regex = Regex::new(
                 r####"(?x)
                 # identifier
-                |[a-zA-Z0-9_:]+
+                [a-zA-Z0-9_:]+
                 "####
             ).unwrap();
     };
@@ -302,6 +299,46 @@ fn is_identifier(token: &String) -> bool{
 
 fn is_type(token: &String) -> bool{
     token == "int" || token == "char" || token == "boolean" || is_identifier(token)
+}
+
+
+fn is_op(token: &String) -> bool{
+    token == "+" || token == "-" || token == "*" || token == "/" || token == "&"
+    || token == "|" || token == "<" || token == ">" || token == "="
+}
+
+
+fn is_unaryOp(token: &String) -> bool{
+    token == "-" || token == "~"
+}
+
+
+fn is_integerConstant(token: &String) -> bool{
+    token.parse::<i32>().is_ok()
+    && token.parse::<i32>().unwrap() >= 0
+    && token.parse::<i32>().unwrap() <= 32767
+}
+
+
+fn is_stringConstant(token: &String) -> bool{
+    lazy_static! { // lazy_static ensures compilation only happens once
+        static ref RE : Regex = Regex::new(
+                r####"(?x)
+                # StringConstant
+                "[^"\n]+"
+                "####
+            ).unwrap();
+    };
+
+    match RE.find(token){
+        Some(_) => true,
+        _ => false
+    }
+}
+
+
+fn is_keywordConstant(token: &String) -> bool{
+    token == "true" || token == "false" || token == "null" || token == "this"
 }
 
 
@@ -347,6 +384,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
     let kw_set = get_kw_set();
     let symbol_set = get_symbol_set();
     let mut token;
+    println!("{:?} {:?} {:?}", parent, tokens[0], tokens[1]);
 
     while !tokens.is_empty() {
         if parent == "class" {
@@ -375,7 +413,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
         } else if parent == "classVarDecs" {
             loop {
                 if tokens[0] != "static" && tokens[0] != "field" {
-                    break;
+                    return;
                 }
                 write_to_file(file, "<classVarDec>".to_string());
                 // ('static | 'field')
@@ -389,7 +427,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                     "Misisng or invalid identifier for class variable");
                 // (',' varName)*
                 loop {
-                    if tokens[0] != "," { break }
+                    if tokens[0] != "," { break; }
                     // ','
                     token = get_token(tokens);
                     write_to_file(file, format!("<symbol> {} </symbol>", token));
@@ -405,7 +443,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
         } else if parent == "subroutineDecs" {
             loop {
                 if tokens[0] != "constructor" && tokens[0] != "function" && tokens[0] != "method" {
-                    break;
+                    return;
                 }
                 write_to_file(file, "<subroutineDec>".to_string());
                 // ('constructor' | 'function' | 'method')
@@ -426,7 +464,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 // parameterList
                 write_xml_tree(tokens, file, "parameterList");
                 // ')'
-                write_symbol("(", tokens, file,
+                write_symbol(")", tokens, file,
                     "Missing ')' in subroutine");  
                 // subroutineBody
                 write_xml_tree(tokens, file, "subroutineBody");
@@ -434,8 +472,8 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
             }
         } else if parent == "parameterList" {
             // leave tokens alone if no parameters
+            write_to_file(file, "<parameterList>".to_string());
             if tokens[0] != ")" {
-                write_to_file(file, "<parameterList>".to_string());
                 // type
                 write_type(tokens, file,
                     "Missing or invalid type specified for parameter");
@@ -458,8 +496,9 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                     }
                     write_to_file(file, format!("<identifier> {} </identifier>", token));
                 }
-                write_to_file(file, "</parameterList>".to_string());
             }
+            write_to_file(file, "</parameterList>".to_string());
+            return;
         } else if parent == "subroutineBody" {
             write_to_file(file, "<subroutineBody>".to_string());
             // '{'
@@ -500,6 +539,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                     "Missing ';' in variable declaration");
                 write_to_file(file, "</varDec>".to_string());
             }
+            return;
         } else if parent == "statements" {
             if tokens[0] == "let" || tokens[0] == "if" || tokens[0] == "while"
             || tokens[0] == "do" || tokens[0] == "return" {
@@ -640,7 +680,107 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
                 "Missing ';' in return statement");
             write_to_file(file, "</returnStatement>".to_string());
         } else if parent == "expression" {
-        } else if parent == "subroutineCall" {
+            write_to_file(file, "<expression>".to_string());
+            // term
+            write_xml_tree(tokens, file, "term");
+            // (op term)*
+            loop {
+                if !is_op(&tokens[0]) { break; }
+                // op
+                token = get_token(tokens);
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+                // term
+                write_xml_tree(tokens, file, "term");
+            }
+            write_to_file(file, "</expression>".to_string());
+        } else if parent == "term" {
+            write_to_file(file, "<term>".to_string());
+            if is_integerConstant(&tokens[0]) {
+                token = get_token(tokens);
+                write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
+            } else if is_stringConstant(&tokens[0]) {
+                token = get_token(tokens);
+                write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
+            } else if is_keywordConstant(&tokens[0]) {
+                token = get_token(tokens);
+                write_to_file(file, format!("<keyword> {} </keyword>", token));
+            } else if is_identifier(&tokens[0]) {
+                if &tokens[1] == "[" {
+                    // '['
+                    token = get_token(tokens);
+                    write_to_file(file, format!("<symbol> {} </symbol>", token));
+                    // expression
+                    write_xml_tree(tokens, file, "expression");
+                    // ']'
+                    write_symbol("]", tokens, file,
+                        "Missing ']' in term");
+                } else if &tokens[1] == "." {
+                    // (className | varName)
+                    token = get_token(tokens);
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // '.'
+                    write_symbol(".", tokens, file,
+                        "Missing '.' in term");
+                    // subroutineName
+                    write_identifier(tokens, file,
+                        "Invalid or missing identifier in term");
+                    // '('
+                    write_symbol("(", tokens, file,
+                        "Missing '(' in term");
+                    // expressionList
+                    write_xml_tree(tokens, file, "expressionList");
+                    // ')'
+                    write_symbol(")", tokens, file,
+                        "Missing ')' in term");
+                } else if &tokens[1] == "(" {
+                    // subroutineName
+                    token = get_token(tokens);
+                    write_to_file(file, format!("<keyword> {} </keyword>", token));
+                    // '('
+                    write_symbol("(", tokens, file,
+                        "Missing '(' in term");
+                    // expressionList
+                    write_xml_tree(tokens, file, "expressionList");
+                    // ')'
+                    write_symbol(")", tokens, file,
+                        "Missing ')' in term");
+                } else {
+                    write_identifier(tokens, file, 
+                        "Invalid or missing identifier in term");
+                }
+            } else if &tokens[0] == "(" {
+                // '('
+                token = get_token(tokens);
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+                // expression
+                write_xml_tree(tokens, file, "expression");
+                // ')'
+            } else if is_unaryOp(&tokens[0]) {
+                // unaryOp
+                token = get_token(tokens);
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+            } else {
+                panic!("Invalid term");
+            }
+            write_to_file(file, "</term>".to_string());
+            return;
+        } else if parent == "expressionList" && tokens[0] != ")" {
+            write_to_file(file, "<expressionList>".to_string());
+            // expression
+            write_xml_tree(tokens, file, "expression");
+            // (',' expression)*
+            loop {
+                if tokens[0] != "," { break; }
+                // ','
+                token = get_token(tokens);
+                write_to_file(file, format!("<symbol> {} </symbol>", token));
+                // expression
+                write_xml_tree(tokens, file, "expression");
+            }
+            write_to_file(file, "</expressionList>".to_string());
+            return;
+        } else {
+            panic!("No condition met");
         }
     }
 }
@@ -669,6 +809,8 @@ fn main () {
             if clean_line == "" { continue };
             tokenize_line(clean_line, &mut tokens);
         }
+
+        println!("{:?}", tokens);
 
         // xml
         write_to_file(out_file, "<class>".to_string());
