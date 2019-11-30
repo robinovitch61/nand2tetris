@@ -225,11 +225,8 @@ fn find_next(line: &str) -> (&str, usize) {
                 [,]|[;]|[+]|[-]|[*]|[/]|[&]|
                 [|]|[<]|[>]|[=]|[~]
 
-                # integerConstant, 0-32767
-                |[0-9]|[1-8][0-9]|9[0-9]|[1-8][0-9]{2}|9[0-8][0-9]|99[0-9]
-                |[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-9]
-                |[12][0-9]{4}|3[01][0-9]{3}|32[0-6][0-9]{2}
-                |327[0-5][0-9]|3276[0-7]
+                # integerConstant
+                |\d{1,5}
 
                 # StringConstant
                 |"[^"\n]+"
@@ -296,6 +293,14 @@ fn is_integerConstant(token: &str) -> bool{
     token.parse::<i32>().is_ok()
     && token.parse::<i32>().unwrap() >= 0
     && token.parse::<i32>().unwrap() <= 32767
+}
+
+
+fn check_size(token: &str) {
+    if token.parse::<i32>().unwrap() < 0
+    || token.parse::<i32>().unwrap() > 32767 {
+        panic!("Integer negative or larger than 32767");
+    }
 }
 
 
@@ -687,7 +692,6 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
             write_xml_tree(tokens, file, "term");
             // (op term)*
             loop {
-                println!("{:?} {:?} {:?} {:?}", parent, tokens[0], tokens[1], tokens[2]);
                 if !is_op(&tokens[0]) { break; }
                 // op
                 write_symbol("next", tokens, file, "");
@@ -699,6 +703,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
         } else if parent == "term" {
             write_to_file(file, "<term>".to_string());
             if is_integerConstant(&tokens[0]) {
+                check_size(&tokens[0]);
                 token = get_token(tokens);
                 write_to_file(file, format!("<integerConstant> {} </integerConstant>", token));
             } else if is_stringConstant(&tokens[0]) {
@@ -737,6 +742,8 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) 
             } else if is_unaryOp(&tokens[0]) {
                 // unaryOp
                 write_symbol("next", tokens, file, "");
+                // term
+                write_xml_tree(tokens, file, "term");
             } else {
                 panic!("Invalid term");
             }
@@ -815,8 +822,6 @@ fn main () {
     while let (Some(contents), Some(in_path), Some(out_file), Some(out_path))
         = (it_file_contents.next(), it_in_paths.next(), it_out_files.next(), it_out_paths.next()) {
 
-        println!("Tokenizing {}...", in_path);
-
         // tokenize
         let mut is_comment = false;
         let mut tokens: VecDeque<String> = VecDeque::new();
@@ -827,13 +832,11 @@ fn main () {
             tokenize_line(clean_line, &mut tokens);
         }
 
-        println!("Creating xml for {}...", in_path);
-
         // xml
         write_to_file(out_file, "<class>".to_string());
         write_xml_tree(&mut tokens, out_file, "class");
         write_to_file(out_file, "</class>".to_string());
 
-        println!("Wrote {} to {}", in_path, out_path);
+        println!("Wrote {} to {}\n", in_path, out_path);
     }
 }
