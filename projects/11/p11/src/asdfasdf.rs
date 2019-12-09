@@ -16,14 +16,6 @@ use regex::Regex;
 #[macro_use]
 extern crate lazy_static;
 
-// enum for class var type
-#[derive(PartialEq, Eq, Debug)]
-enum ClassVarType {
-    Null,
-    Field,
-    Static
-}
-
 
 /// Returns a String of the file contents at path
 /// Note: path is referenced from the root directory of the project
@@ -149,7 +141,7 @@ fn remove_comments(line: &str, is_comment: bool) -> (&str, bool) {
     let mut mod_comment = is_comment;
 
     // check if line begins multi-line comment '/**'
-    let idx_start_ml: i32 = match mod_line.find("/**") { // TODO: /* STUFF */
+    let idx_start_ml: i32 = match mod_line.find("/**") { // TO DO: /* STUFF */
         Some(idx) => idx as i32,
         _ => -1
     };
@@ -282,7 +274,7 @@ fn is_identifier(token: &str) -> bool{
 
 
 fn is_type(token: &str) -> bool{
-    token == "int" || token == "char" || token == "boolean" || is_identifier(token)
+    token == "int" || token == "char" || token == "boolean" || is_identifier(&token.to_string())
 }
 
 
@@ -345,7 +337,7 @@ fn get_token(tokens: &mut VecDeque<String>) -> String {
 fn write_symbol(symbol: &str, tokens: &mut VecDeque<String>, file: &fs::File, err: &str) {
     let token = get_token(tokens);
     let err = err.to_string();
-    if symbol != "any" && token != symbol {
+    if symbol != "next" && token != symbol {
         panic!(err);
     }
     if token == "<" {
@@ -362,47 +354,28 @@ fn write_symbol(symbol: &str, tokens: &mut VecDeque<String>, file: &fs::File, er
 }
 
 
-fn write_keyword(kw: &str, tokens: &mut VecDeque<String>, file: &fs::File, err: &str) {
+fn write_type(tokens: &mut VecDeque<String>, file: &fs::File,
+        kw_set: &HashSet<String>, err: &str) {
     let token = get_token(tokens);
     let err = err.to_string();
-    if kw != "any" && token != kw {
+    if !is_type(&token) {
         panic!(err);
     }
-    write_to_file(file, format!("<keyword> {} </keyword>", token));
-}
-
-
-fn write_type(tokens: &mut VecDeque<String>, file: &fs::File,
-        kw_set: &HashSet<String>, class_var_type: &ClassVarType, err: &str) {
-
-    // if is_type, write keyword
-    // else if is_identifier, write identifier 
-    // else raise
-
-    if !is_type(&tokens[0]) {
-        let err = err.to_string();
-        panic!(err);
-    }
-
-    if !kw_set.contains(&tokens[0]) {
-        // know it's a custom type, i.e. user defined class / type
-        write_identifier(tokens, file, "custom_type", &class_var_type, err);
-    } else {
-        write_keyword("any", tokens, file, err);
-    }
+    write_keyword(&token, file, kw_set);
 }
 
 
 fn write_identifier(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str,
-    class_var_type: &ClassVarType, err: &str) {
+        kw_set: &HashSet<String>, err: &str) {
     let token = get_token(tokens);
     let err = err.to_string();
+    println!("{}, {}", token, parent);
     if !is_identifier(&token) {
         panic!(err);
     }
-    // println!("{}, {}, {:?}", token, parent, class_var_type);
-
-    if parent == "class" {
+    if kw_set.contains(&token) {
+        write_to_file(file, format!("<keyword> {} </keyword>", token));
+    } else if parent == "class" {
         write_to_file(file, format!("<identifier> {} (class) </identifier>", token));
     } else if parent == "parameterList" {
         write_to_file(file, format!("<identifier> {} (argument) </identifier>", token));
@@ -410,42 +383,45 @@ fn write_identifier(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str
         write_to_file(file, format!("<identifier> {} (subroutine) </identifier>", token));
     } else if parent == "varDecs" || parent == "letStatement" || parent == "term" {
         write_to_file(file, format!("<identifier> {} (var/local) </identifier>", token));
-    } else if parent == "classVarDecs" {
-        // println!("{}, {}, {:?}", token, parent, class_var_type);
-        if class_var_type == &ClassVarType::Field {
-            write_to_file(file, format!("<identifier> {} (field) </identifier>", token));
-            // println!("{}, {}, {:?}", token, parent, class_var_type);
-        } else if class_var_type == &ClassVarType::Static {
-            write_to_file(file, format!("<identifier> {} (static) </identifier>", token));
-        }
-    } else if parent == "custom_type" {
-        // println!("{}, {}, {:?}", token, parent, class_var_type);
+    } else {
+        write_to_file(file, format!("<identifier> {} (NULL) </identifier>", token));
+    }
+}
+
+
+fn write_keyword(token: &str, file: &fs::File, kw_set: &HashSet<String>) {
+    if kw_set.contains(token) {
+        write_to_file(file, format!("<keyword> {} </keyword>", token));
+    } else {
+        println!("{}, OH NO", token);
         write_to_file(file, format!("<identifier> {} </identifier>", token));
     }
 }
 
 
-fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_type: &ClassVarType, parent: &str) {
+fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, parent: &str) {
     let kw_set = get_kw_set();
     // let symbol_set = get_symbol_set();
-    let token;
+    let mut token;
 
     while !tokens.is_empty() {
-
         if parent == "class" {
             // 'class'
-            write_keyword("class", tokens, file,
-                "File does not begin with 'class' declaration");
+            token = get_token(tokens);
+            if token != "class" {
+                panic!("File does not begin with class declaration");
+            }
+            write_keyword(&token, file, &kw_set);
             // className
-            write_identifier(tokens, file, parent, class_var_type,
+            write_identifier(tokens, file, parent, &kw_set,
                 "Missing or invalid identifier for class");
             // '{'
             write_symbol("{", tokens, file,
                 "Missing '{' after className identifier");
             // 'classVarDecs'
-            write_xml_tree(tokens, file, class_var_type, "classVarDecs");
+            write_xml_tree(tokens, file, "classVarDecs");
             // 'subroutineDecs'
-            write_xml_tree(tokens, file, class_var_type, "subroutineDecs");
+            write_xml_tree(tokens, file, "subroutineDecs");
             // '}'
             write_symbol("}", tokens, file,
                 "Missing closing '}' for class");
@@ -455,22 +431,15 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                 if tokens[0] != "static" && tokens[0] != "field" {
                     return;
                 }
-                
-                // update class_var_type if necessary
-                if &tokens[0] == "static" {
-                    class_var_type = &ClassVarType::Static;
-                } else if &tokens[0] == "field" {
-                    class_var_type = &ClassVarType::Field;
-                }
-
                 write_to_file(file, "<classVarDec>".to_string());
                 // ('static' | 'field')
-                write_keyword("any", tokens, file, "");
+                write_identifier(tokens, file, parent, &kw_set,
+                    "Expecting 'static' or 'field' keyword in classVarDecs");
                 // type
-                write_type(tokens, file, &kw_set, &class_var_type,
+                write_type(tokens, file, &kw_set,
                     "Missing or invalid type specified for class variable");
                 // varName
-                write_identifier(tokens, file, parent, &class_var_type,
+                write_identifier(tokens, file, parent, &kw_set,
                     "Missing or invalid identifier for class variable");
                 // (',' varName)*
                 loop {
@@ -478,7 +447,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                     // ','
                     write_symbol(",", tokens, file, "");
                     // varName
-                    write_identifier(tokens, file, parent, &class_var_type,
+                    write_identifier(tokens, file, parent, &kw_set,
                         "Missing or invalid identifier or extra ',' in class variable");
                 }
                 // ';'
@@ -493,29 +462,30 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                 }
                 write_to_file(file, "<subroutineDec>".to_string());
                 // ('constructor' | 'function' | 'method')
-                write_keyword("any", tokens, file, "");
+                if &tokens[0] != "constructor" && &tokens[0] != "function" && &tokens[0] != "method" {
+                    panic!("Expecting 'constructor', 'function', or 'method' declaration in subroutineDec");
+                }
+                write_identifier(tokens, file, parent, &kw_set,
+                    "Failed to write 'constructor', 'function', or 'method' in subroutineDec");
                 // ('void' | type)
-                match tokens[0].as_ref() {
-                    "void" => {
-                        write_keyword("void", tokens, file,
-                            "Expected 'void' return type");
-                    },
-                    _ => write_type(tokens, file, &kw_set, class_var_type,
-                            "Failed to write return type for subroutineDec")
-                };
+                if &tokens[0] != "void" && !is_type(&tokens[0]) {
+                    panic!("Expecting type (or 'void') return type specification in subroutineDec");
+                }
+                write_identifier(tokens, file, parent, &kw_set,
+                    "Failed to write 'void' or return type of subroutineDec");
                 // subroutineName
-                write_identifier(tokens, file, parent, &class_var_type,
+                write_identifier(tokens, file, parent, &kw_set,
                     "Missing or invalid identifier in subroutine");
                 // '('
                 write_symbol("(", tokens, file,
                     "Missing '(' in subroutine");   
                 // parameterList
-                write_xml_tree(tokens, file, class_var_type, "parameterList");
+                write_xml_tree(tokens, file, "parameterList");
                 // ')'
                 write_symbol(")", tokens, file,
                     "Missing ')' in subroutine");  
                 // subroutineBody
-                write_xml_tree(tokens, file, class_var_type, "subroutineBody");
+                write_xml_tree(tokens, file, "subroutineBody");
                 write_to_file(file, "</subroutineDec>".to_string());
             }
         } else if parent == "parameterList" {
@@ -523,10 +493,10 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_to_file(file, "<parameterList>".to_string());
             if tokens[0] != ")" {
                 // type
-                write_type(tokens, file, &kw_set, class_var_type,
+                write_type(tokens, file, &kw_set,
                     "Missing or invalid type specified for parameter");
                 // varName
-                write_identifier(tokens, file, parent, &class_var_type, 
+                write_identifier(tokens, file, parent, &kw_set, 
                     "Missing or invalid identifier for parameter");
                 // (',' type varName)*
                 loop {
@@ -534,10 +504,10 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                     // ','
                     write_symbol(",", tokens, file, "");
                     // type
-                    write_type(tokens, file, &kw_set, class_var_type,
+                    write_type(tokens, file, &kw_set,
                         "Missing or invalid type specified for parameter");
                     // varName
-                    write_identifier(tokens, file, parent, &class_var_type, 
+                    write_identifier(tokens, file, parent, &kw_set, 
                         "Missing/invalid identifier or extra ',' in parameterList");
                 }
             }
@@ -549,9 +519,9 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_symbol("{", tokens, file,
                 "Missing '{' in subroutine body"); 
             // varDec*
-            write_xml_tree(tokens, file, class_var_type, "varDecs");
+            write_xml_tree(tokens, file, "varDecs");
             // statements
-            write_xml_tree(tokens, file, class_var_type, "statements");
+            write_xml_tree(tokens, file, "statements");
             // '}'
             write_symbol("}", tokens, file,
                 "Missing '}' in subroutine body"); 
@@ -562,13 +532,16 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                 if tokens[0] != "var" { break; }
                 write_to_file(file, "<varDec>".to_string());
                 // 'var'
-                write_keyword("var", tokens, file,
-                    "Expected 'var' keyword in varDec");
+                if &tokens[0] != "var" {
+                    panic!("Expecting 'var' in varDec");
+                }
+                write_identifier(tokens, file, parent, &kw_set,
+                    "Failed to write 'var' in varDec");
                 // type
-                write_type(tokens, file, &kw_set, class_var_type,
+                write_type(tokens, file, &kw_set,
                     "Missing or invalid type in variable declaration");
                 // varName
-                write_identifier(tokens, file, parent, &class_var_type,
+                write_identifier(tokens, file, parent, &kw_set,
                     "Missing or invalid identifier in variable declaration");
                 // (',' varName)*
                 loop {
@@ -576,7 +549,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                     // ','
                     write_symbol(",", tokens, file, "");
                     // varName
-                    write_identifier(tokens, file, parent, &class_var_type,
+                    write_identifier(tokens, file, parent, &kw_set,
                         "Missing or invalid identifier or extra ',' in variable declaration");
                 }
                 write_symbol(";", tokens, file,
@@ -596,19 +569,19 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                 }
                 if tokens[0] == "let" {
                     // letStatement
-                    write_xml_tree(tokens, file, class_var_type, "letStatement");
+                    write_xml_tree(tokens, file, "letStatement");
                 } else if tokens[0] == "if" {
                     // ifStatement
-                    write_xml_tree(tokens, file, class_var_type, "ifStatement");
+                    write_xml_tree(tokens, file, "ifStatement");
                 } else if tokens[0] == "while" {
                     // whileStatement
-                    write_xml_tree(tokens, file, class_var_type, "whileStatement");
+                    write_xml_tree(tokens, file, "whileStatement");
                 } else if tokens[0] == "do" {
                     // doStatement
-                    write_xml_tree(tokens, file, class_var_type, "doStatement");
+                    write_xml_tree(tokens, file, "doStatement");
                 } else {
                     // returnStatement
-                    write_xml_tree(tokens, file, class_var_type, "returnStatement");
+                    write_xml_tree(tokens, file, "returnStatement");
                 }
             }
             write_to_file(file, "</statements>".to_string());
@@ -616,17 +589,17 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "letStatement" {
             write_to_file(file, "<letStatement>".to_string());
             // 'let'
-            write_keyword("let", tokens, file,
-                "Expected 'let' keyword in letStatement");
+            write_identifier(tokens, file, parent, &kw_set,
+                "Failed to write 'let' in letStatement");
             // varName
-            write_identifier(tokens, file, parent, &class_var_type,
+            write_identifier(tokens, file, parent, &kw_set,
                 "Missing or invalid identifier in let statement");
             // ('[' expression ']')?
             if tokens[0] == "[" {
                 // '['
                 write_symbol("[", tokens, file, "");
                 // expression
-                write_xml_tree(tokens, file, class_var_type, "expression");
+                write_xml_tree(tokens, file, "expression");
                 // ']'
                 write_symbol("]", tokens, file,
                     "Missing ']' for expression in let statement");
@@ -635,7 +608,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_symbol("=", tokens, file,
                 "Missing '=' in let statement");
             // expression
-            write_xml_tree(tokens, file, class_var_type, "expression");
+            write_xml_tree(tokens, file, "expression");
             // ';'
             write_symbol(";", tokens, file,
                 "Missing ';' in let statement");
@@ -644,13 +617,13 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "ifStatement" {
             write_to_file(file, "<ifStatement>".to_string());
             // 'if'
-            write_keyword("if", tokens, file,
-                "Expected 'if' keyword in ifStatement");
+            write_identifier(tokens, file, parent, &kw_set,
+                "Failed to write 'if' in ifStatement");
             // '('
             write_symbol("(", tokens, file,
                 "Missing '(' for conditional expression in if statement");
             // expression
-            write_xml_tree(tokens, file, class_var_type, "expression");
+            write_xml_tree(tokens, file, "expression");
             // ')'
             write_symbol(")", tokens, file,
                 "Missing ')' for conditional expression in if statement");
@@ -658,20 +631,20 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_symbol("{", tokens, file,
                 "Missing '{' in if statement");
             // statements
-            write_xml_tree(tokens, file, class_var_type, "statements");
+            write_xml_tree(tokens, file, "statements");
             // '}'
             write_symbol("}", tokens, file,
                 "Missing '}' in if statement");
             // ('else' '{' statements '}')?
             if tokens[0] == "else" {
                 // 'else'
-                write_keyword("else", tokens, file,
-                    "Found 'else' keyword but failed to write");
+                token = get_token(tokens);
+                write_keyword(&token, file, &kw_set);
                 // '{'
                 write_symbol("{", tokens, file,
                     "Missing '{' in else part of if statement");
                 // statements
-                write_xml_tree(tokens, file, class_var_type, "statements");
+                write_xml_tree(tokens, file, "statements");
                 // '}'
                 write_symbol("}", tokens, file,
                     "Missing '}' in else part of if statement");
@@ -681,13 +654,13 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "whileStatement" {
             write_to_file(file, "<whileStatement>".to_string());
             // 'while'
-            write_keyword("while", tokens, file,
-                "Expected 'while' keyword in whileStatement");
+            write_identifier(tokens, file, parent, &kw_set,
+                "Failed to write 'while' in whileStatement");
             // '('
             write_symbol("(", tokens, file,
                 "Missing '(' for conditional expression in while statement");
             // expression
-            write_xml_tree(tokens, file, class_var_type, "expression");
+            write_xml_tree(tokens, file, "expression");
             // ')'
             write_symbol(")", tokens, file,
                 "Missing ')' for conditional expression in while statement");
@@ -695,7 +668,7 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_symbol("{", tokens, file,
                 "Missing '{' in while statement");
             // statements
-            write_xml_tree(tokens, file, class_var_type, "statements");
+            write_xml_tree(tokens, file, "statements");
             // '}'
             write_symbol("}", tokens, file,
                 "Missing '}' in while statement");
@@ -704,10 +677,10 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "doStatement" {
             write_to_file(file, "<doStatement>".to_string());
             // 'do'
-            write_keyword("do", tokens, file,
-                "Expected 'do' keyword in doStatement");
+            write_identifier(tokens, file, parent, &kw_set,
+                "Failed to write 'while' in whileStatement");
             // subroutineCall
-            write_xml_tree(tokens, file, class_var_type, "subroutineCall");
+            write_xml_tree(tokens, file, "subroutineCall");
             // ';'
             write_symbol(";", tokens, file,
                 "Missing ';' in do statement");
@@ -716,12 +689,12 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "returnStatement" {
             write_to_file(file, "<returnStatement>".to_string());
             // 'return'
-            write_keyword("return", tokens, file,
-                "Expected 'return' keyword in returnStatement");
+            token = get_token(tokens);
+            write_keyword(&token, file, &kw_set);
             // expression?
             if tokens[0] != ";" {
                 // expression
-                write_xml_tree(tokens, file, class_var_type, "expression");
+                write_xml_tree(tokens, file, "expression");
             }
             // ';'
             write_symbol(";", tokens, file,
@@ -731,14 +704,14 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "expression" {
             write_to_file(file, "<expression>".to_string());
             // term
-            write_xml_tree(tokens, file, class_var_type, "term");
+            write_xml_tree(tokens, file, "term");
             // (op term)*
             loop {
                 if !is_op(&tokens[0]) { break; }
                 // op
-                write_symbol("any", tokens, file, "");
+                write_symbol("next", tokens, file, "");
                 // term
-                write_xml_tree(tokens, file, class_var_type, "term");
+                write_xml_tree(tokens, file, "term");
             }
             write_to_file(file, "</expression>".to_string());
             return;
@@ -752,40 +725,40 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
                 token = get_token(tokens);
                 write_to_file(file, format!("<stringConstant> {} </stringConstant>", &token[1..token.len()-1]));
             } else if is_keywordConstant(&tokens[0]) {
-                write_keyword("any", tokens, file,
-                    "Failed to write keyword");
+                token = get_token(tokens);
+                write_keyword(&token, file, &kw_set);
             } else if is_identifier(&tokens[0]) {
                 if &tokens[1] == "[" {
                     // varName
-                    write_identifier(tokens, file, parent, &class_var_type,
+                    write_identifier(tokens, file, parent, &kw_set,
                         "Invalid identifier for varName[...]");
                     // '['
                     write_symbol("[", tokens, file,
                         "Missing '[' in term");
                     // expression
-                    write_xml_tree(tokens, file, class_var_type, "expression");
+                    write_xml_tree(tokens, file, "expression");
                     // ']'
                     write_symbol("]", tokens, file,
                         "Missing ']' in term");
                 } else if &tokens[1] == "(" || &tokens[1] == "." {
                     // subroutineCall
-                    write_xml_tree(tokens, file, class_var_type, "subroutineCall");
+                    write_xml_tree(tokens, file, "subroutineCall");
                 } else {
-                    write_identifier(tokens, file, parent, &class_var_type, 
+                    write_identifier(tokens, file, parent, &kw_set, 
                         "Invalid or missing identifier in term");
                 }
             } else if &tokens[0] == "(" {
                 // '('
                 write_symbol("(", tokens, file, "");
                 // expression
-                write_xml_tree(tokens, file, class_var_type, "expression");
+                write_xml_tree(tokens, file, "expression");
                 // ')'
                 write_symbol(")", tokens, file, "");
             } else if is_unaryOp(&tokens[0]) {
                 // unaryOp
-                write_symbol("any", tokens, file, "");
+                write_symbol("next", tokens, file, "");
                 // term
-                write_xml_tree(tokens, file, class_var_type, "term");
+                write_xml_tree(tokens, file, "term");
             } else {
                 panic!("Invalid term");
             }
@@ -794,32 +767,32 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
         } else if parent == "subroutineCall" {
             if &tokens[1] == "." {
                 // (className | varName)
-                write_identifier(tokens, file, parent, &class_var_type,
-                    "Invalid or missing identifier in subroutineCall");
+                token = get_token(tokens);
+                write_keyword(&token, file, &kw_set);
                 // '.'
                 write_symbol(".", tokens, file,
                     "Missing '.' in term");
                 // subroutineName
-                write_identifier(tokens, file, parent, &class_var_type,
+                write_identifier(tokens, file, parent, &kw_set,
                     "Invalid or missing identifier in term");
                 // '('
                 write_symbol("(", tokens, file,
                     "Missing '(' in term");
                 // expressionList
-                write_xml_tree(tokens, file, class_var_type, "expressionList");
+                write_xml_tree(tokens, file, "expressionList");
                 // ')'
                 write_symbol(")", tokens, file,
                     "Missing ')' in term");
                 return;
             } else if &tokens[1] == "(" {
                 // subroutineName
-                write_identifier(tokens, file, parent, &class_var_type,
-                    "Invalid or missing identifier in subroutineCall");
+                token = get_token(tokens);
+                write_keyword(&token, file, &kw_set);
                 // '('
                 write_symbol("(", tokens, file,
                     "Missing '(' in term");
                 // expressionList
-                write_xml_tree(tokens, file, class_var_type, "expressionList");
+                write_xml_tree(tokens, file, "expressionList");
                 // ')'
                 write_symbol(")", tokens, file,
                     "Missing ')' in term");
@@ -831,14 +804,14 @@ fn write_xml_tree(tokens: &mut VecDeque<String>, file: &fs::File, mut class_var_
             write_to_file(file, "<expressionList>".to_string());
             if tokens[0] != ")" {
                 // expression
-                write_xml_tree(tokens, file, class_var_type, "expression");
+                write_xml_tree(tokens, file, "expression");
                 // (',' expression)*
                 loop {
                     if tokens[0] != "," { break; }
                     // ','
                     write_symbol(",", tokens, file, "");
                     // expression
-                    write_xml_tree(tokens, file, class_var_type, "expression");
+                    write_xml_tree(tokens, file, "expression");
                 }
             }
             write_to_file(file, "</expressionList>".to_string());
@@ -875,9 +848,8 @@ fn main () {
         }
 
         // xml
-        let class_var_type = &ClassVarType::Null;
         write_to_file(out_file, "<class>".to_string());
-        write_xml_tree(&mut tokens, out_file, class_var_type, "class");
+        write_xml_tree(&mut tokens, out_file, "class");
         write_to_file(out_file, "</class>".to_string());
 
         println!("Wrote {} to {}\n", in_path, out_path);
