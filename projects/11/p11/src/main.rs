@@ -37,141 +37,6 @@ extern crate lazy_static;
 
 
 // *****************************************
-//     JACK TOKENIZER
-// *****************************************
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum TokenType {
-    KEYWORD,
-    SYMBOL,
-    IDENTIFIER,
-    INT_CONST,
-    STRING_CONST,
-}
-
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum KwType {
-    CLASS,
-    METHOD,
-    FUNCTION,
-    CONSTRUCTOR,
-    INT,
-    BOOLEAN,
-    CHAR,
-    VOID,
-    VAR,
-    STATIC,
-    FIELD,
-    LET,
-    DO,
-    IF,
-    ELSE,
-    WHILE,
-    RETURN,
-    TRUE,
-    FALSE,
-    NULL,
-    THIS,
-}
-
-#[derive(Debug)]
-struct JackTokenizer<'a> {
-    // fns:
-    // - has_more_tokens -- returns bool
-    // - advance -- advances index if has_more_tokens
-    // - token_type -- returns TokenType of current token
-    // - keyword -- returns keyword of current token (TokenType::KEYWORD only)
-    // - symbol -- returns symbol of current token (TokenType::SYMBOL only)
-    // - identifier -- returns identifier of current token (TokenType::IDENTIFIER only)
-    // - int_val -- returns integer value of current token (TokenType::INT_CONST only)
-    // - string_val -- returns string value of current token (TokenType::STRING_CONST only)
-
-    // lifetime means a JackTokenizer instance can't
-    // outlive any token string references in tokens
-    tokens: VecDeque<String>,
-    index: usize,
-    valid_keywords: Vec<&'a str>,
-    valid_symbols: Vec<&'a str>,
-}
-
-impl<'a> Default for JackTokenizer<'a> {
-    // fn from_file_contents(file_contents: String) -> JackTokenizer {
-    //     JackTokenizer {
-
-    //     }
-    // }
-
-    fn default() -> JackTokenizer<'a> {
-        JackTokenizer {
-            tokens: VecDeque::new(),
-            index: 0,
-            valid_keywords: vec!["class", "constructor", "function", "method", "field",
-            "static", "var", "int", "char", "boolean", "void", "true", "false",
-            "null", "this", "let", "do", "if", "else", "while", "return"],
-            valid_symbols: vec!["{", "}", "(", ")", "[", "]", ".",
-            ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"],
-
-        }
-    }
-}
-
-impl<'a> JackTokenizer<'a> {
-    fn has_more_tokens(&self) -> bool {
-        self.index > self.tokens.len()
-    }
-
-    fn advance(&mut self) {
-        self.index += 1;
-    }
-
-    fn curr_token(&self) -> &str {
-        &self.tokens[self.index]
-    }
-
-    fn token_type(&self) -> TokenType {
-        let token = self.curr_token();
-        if self.valid_keywords.contains(&token) {
-            TokenType::KEYWORD
-        } else if self.valid_symbols.contains(&token) {
-            TokenType::SYMBOL
-        } else if token.chars().nth(0).unwrap() == '"'
-                && token.chars().nth(token.len()-1).unwrap() == '"' {
-            TokenType::STRING_CONST
-        } else if token.parse::<u32>().is_ok() {
-            TokenType::INT_CONST
-        } else {
-            TokenType::IDENTIFIER
-        }
-    }
-
-    fn keyword(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::KEYWORD);
-        self.curr_token()
-    }
-
-    fn symbol(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::SYMBOL);
-        self.curr_token()
-    }
-
-    fn identifier(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::IDENTIFIER);
-        self.curr_token()
-    }
-
-    fn int_val(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::INT_CONST);
-        self.curr_token()
-    }
-
-    fn string_val(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::STRING_CONST);
-        let token = self.curr_token();
-        &token[1..token.len()-2]
-    }
-}
-
-
-// *****************************************
 //     FILE PARSER
 // *****************************************
 #[derive(Debug)]
@@ -380,12 +245,146 @@ impl<'a> FileParser<'a> {
 }
 
 
+// *****************************************
+//     JACK TOKENIZER
+// *****************************************
+#[derive(PartialEq, Debug, Clone, Copy)]
+enum TokenType {
+    KEYWORD,
+    SYMBOL,
+    IDENTIFIER,
+    INT_CONST,
+    STRING_CONST,
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+enum KwType {
+    CLASS,
+    METHOD,
+    FUNCTION,
+    CONSTRUCTOR,
+    INT,
+    BOOLEAN,
+    CHAR,
+    VOID,
+    VAR,
+    STATIC,
+    FIELD,
+    LET,
+    DO,
+    IF,
+    ELSE,
+    WHILE,
+    RETURN,
+    TRUE,
+    FALSE,
+    NULL,
+    THIS,
+}
+
+#[derive(Debug)]
+struct JackTokenizer<'a> {
+    // fns:
+    // - has_more_tokens -- returns bool
+    // - advance -- advances index if has_more_tokens
+    // - token_type -- returns TokenType of current token
+    // - keyword -- returns keyword of current token (TokenType::KEYWORD only)
+    // - symbol -- returns symbol of current token (TokenType::SYMBOL only)
+    // - identifier -- returns identifier of current token (TokenType::IDENTIFIER only)
+    // - int_val -- returns integer value of current token (TokenType::INT_CONST only)
+    // - string_val -- returns string value of current token (TokenType::STRING_CONST only)
+
+    // lifetime means a JackTokenizer instance can't
+    // outlive any token string references in tokens
+    tokens: VecDeque<String>,
+    index: usize,
+    valid_keywords: Vec<&'a str>,
+    valid_symbols: Vec<&'a str>,
+}
+
+impl<'a> Default for JackTokenizer<'a> {
+    // fn from_file_contents(file_contents: String) -> JackTokenizer {
+    //     JackTokenizer {
+
+    //     }
+    // }
+
+    fn default() -> JackTokenizer<'a> {
+        JackTokenizer {
+            tokens: VecDeque::new(),
+            index: 0,
+            valid_keywords: vec!["class", "constructor", "function", "method", "field",
+            "static", "var", "int", "char", "boolean", "void", "true", "false",
+            "null", "this", "let", "do", "if", "else", "while", "return"],
+            valid_symbols: vec!["{", "}", "(", ")", "[", "]", ".",
+            ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"],
+
+        }
+    }
+}
+
+impl<'a> JackTokenizer<'a> {
+    fn has_more_tokens(&self) -> bool {
+        self.index > self.tokens.len()
+    }
+
+    fn advance(&mut self) {
+        self.index += 1;
+    }
+
+    fn curr_token(&self) -> &str {
+        &self.tokens[self.index]
+    }
+
+    fn token_type(&self) -> TokenType {
+        let token = self.curr_token();
+        if self.valid_keywords.contains(&token) {
+            TokenType::KEYWORD
+        } else if self.valid_symbols.contains(&token) {
+            TokenType::SYMBOL
+        } else if token.chars().nth(0).unwrap() == '"'
+                && token.chars().nth(token.len()-1).unwrap() == '"' {
+            TokenType::STRING_CONST
+        } else if token.parse::<u32>().is_ok() {
+            TokenType::INT_CONST
+        } else {
+            TokenType::IDENTIFIER
+        }
+    }
+
+    fn keyword(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::KEYWORD);
+        self.curr_token()
+    }
+
+    fn symbol(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::SYMBOL);
+        self.curr_token()
+    }
+
+    fn identifier(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::IDENTIFIER);
+        self.curr_token()
+    }
+
+    fn int_val(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::INT_CONST);
+        self.curr_token()
+    }
+
+    fn string_val(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::STRING_CONST);
+        let token = self.curr_token();
+        &token[1..token.len()-2]
+    }
+}
+
 
 // *****************************************
-//     COMPUTATION ENGINE
+//     COMPILATION ENGINE
 // *****************************************
 #[derive(Debug)]
-struct ComputationEngine<> {
+struct CompilationEngine<'a> {
     // fns:
     // - compile_class
     // - compile_class_var_dec
@@ -401,11 +400,16 @@ struct ComputationEngine<> {
     // - compile_expression
     // - compile_term
     // - compile_expression_list
-
-
     
+    tokenizer: JackTokenizer<'a>,
+    output_file: fs::File,
+    symbol_table: SymbolTable
 }
 
+impl<'a> CompilationEngine<'a> {
+    fn compile_class(&self) {
+    }
+}
 
 // *****************************************
 //     SYMBOL TABLE
@@ -647,26 +651,34 @@ fn main() {
     let file_parser = FileParser::from_user_args("jack", "vm");
     let input_paths = file_parser.get_filepaths();
     for input_path in &input_paths {
-        let input_path_string = file_parser.get_path_string(input_path);
+        // path stuff
         let output_path = &file_parser.get_output_filepath(input_path);
+        let input_path_string = file_parser.get_path_string(input_path);
         let output_path_string = file_parser.get_path_string(output_path);
         println!("Compiling {} to {}...", input_path_string, output_path_string);
-        
+
+        // file i/o
         let output_file = file_parser.get_writeable_file(output_path);
         let file_contents = file_parser.get_file_contents(input_path);
-        let tokens = file_parser.tokenize_for_jack(file_contents);
 
+        // tokenize
+        let tokens = file_parser.tokenize_for_jack(file_contents);
         let tokenizer = JackTokenizer{ tokens, ..Default::default() };
 
+        // new symbol table
+        let mut symbol_table = SymbolTable{
+            ClassScope: HashMap::new(),
+            SubrScope: HashMap::new(),
+        };
+
+        // create compilation engine and compile
+        let compiler = CompilationEngine{ tokenizer, output_file, symbol_table };
+        compiler.compile_class();
     }
 
-    let mut symbol_table = SymbolTable{
-        ClassScope: HashMap::new(),
-        SubrScope: HashMap::new(),
-    };
 
-    symbol_table.define("test".to_string(), "fuck".to_string(), Kind::ARGUMENT);
-    println!("{:?}", symbol_table);
+
+    // symbol_table.define("test".to_string(), "woops".to_string(), Kind::ARGUMENT);
 }
 
     // - get_filepaths
