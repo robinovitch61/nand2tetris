@@ -74,12 +74,12 @@ enum KwType {
 }
 
 #[derive(Debug)]
-struct JackTokenizer<'a > {
+struct JackTokenizer<'a> {
     // fns:
     // - has_more_tokens -- returns bool
     // - advance -- advances index if has_more_tokens
     // - token_type -- returns TokenType of current token
-    // - keyword -- returns KwType of current token
+    // - keyword -- returns keyword of current token (TokenType::KEYWORD only)
     // - symbol -- returns symbol of current token (TokenType::SYMBOL only)
     // - identifier -- returns identifier of current token (TokenType::IDENTIFIER only)
     // - int_val -- returns integer value of current token (TokenType::INT_CONST only)
@@ -88,11 +88,196 @@ struct JackTokenizer<'a > {
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
     tokens: VecDeque<&'a str>,
-    index: u32,
+    index: usize,
+    valid_keywords: Vec<&'a str>,
+    valid_symbols: Vec<&'a str>,
 }
 
-impl JackTokenizer {
+impl<'a> Default for JackTokenizer<'a> {
+    fn default() -> JackTokenizer<'a> {
+        JackTokenizer {
+            tokens: VecDeque::new(),
+            index: 0,
+            valid_keywords: vec!["class", "constructor", "function", "method", "field",
+            "static", "var", "int", "char", "boolean", "void", "true", "false",
+            "null", "this", "let", "do", "if", "else", "while", "return"],
+            valid_symbols: vec!["{", "}", "(", ")", "[", "]", ".",
+            ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"],
 
+        }
+    }
+}
+
+impl<'a> JackTokenizer<'a> {
+    fn has_more_tokens(&self) -> bool {
+        self.index > self.tokens.len()
+    }
+
+    fn advance(&mut self) {
+        self.index += 1;
+    }
+
+    fn curr_token(&self) -> &str {
+        self.tokens[self.index]
+    }
+
+    fn token_type(&self) -> TokenType {
+        let token = self.curr_token();
+        if self.valid_keywords.contains(&token) {
+            TokenType::KEYWORD
+        } else if self.valid_symbols.contains(&token) {
+            TokenType::SYMBOL
+        } else if token.chars().nth(0).unwrap() == '"'
+                && token.chars().nth(token.len()-1).unwrap() == '"' {
+            TokenType::STRING_CONST
+        } else if token.parse::<u32>().is_ok() {
+            TokenType::INT_CONST
+        } else {
+            TokenType::IDENTIFIER
+        }
+    }
+
+    fn keyword(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::KEYWORD);
+        self.curr_token()
+    }
+
+    fn symbol(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::SYMBOL);
+        self.curr_token()
+    }
+
+    fn identifier(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::IDENTIFIER);
+        self.curr_token()
+    }
+
+    fn int_val(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::INT_CONST);
+        self.curr_token()
+    }
+
+    fn string_val(&self) -> &str {
+        assert_eq!(self.token_type(), TokenType::STRING_CONST);
+        let token = self.curr_token();
+        &token[1..token.len()-2]
+    }
+}
+
+
+// *****************************************
+//     FILE PARSER
+// *****************************************
+#[derive(Debug)]
+struct FileParser<'a> {
+    // fns:
+    // - get_filepaths
+    // - get_file_contents (args: path)
+    // - get_output_filepath (args: path)
+    // - get_writeable_file (args: path)
+    // - get_path_string (args: file)
+    input_path: &'a str,
+    input_extension: &'a str,
+    output_extension: &'a str,
+}
+
+impl<'a> FileParser<'a> {
+    fn from_user_args(input_extension: &'a str,
+        output_extension: &'a str)-> FileParser<'a> {
+        let args: Vec<String> = env::args().collect();
+        if args.len() < 2 {
+            println!("\nMissing required argument");
+            println!("Usage: cargo run FILENAME\n");
+            panic!();
+        };
+        FileParser {
+            input_path: &args[1],
+            input_extension,
+            output_extension,
+        }
+    }
+
+    fn get_filepaths(&self) -> Vec<PathBuf> {
+        match PathBuf::from(self.input_path).extension() {
+            Some(ext) => {
+                if ext == self.input_extension {
+                    return vec![PathBuf::from(self.input_path)];
+                } else {
+                    panic!(format!("Invalid non-.{} input found",
+                        self.input_extension));
+                }
+            }
+            _ => {
+                let paths = fs::read_dir(self.input_path).unwrap();
+    
+                let mut ext_paths: Vec<PathBuf> = Vec::new();
+                for direntry in paths {
+                    let path = direntry.unwrap().path();
+                    if path.extension().unwrap() == self.input_extension {
+                        ext_paths.push(path);
+                    }
+                }
+                ext_paths
+            }
+        }
+    }
+
+    fn get_file_contents(&self, path: &PathBuf) -> String {
+        assert_eq!(path.extension().unwrap(), self.input_extension);
+
+        let file = fs::File::open(path).expect("Failed to open file");
+        let mut buf_reader = BufReader::new(file);
+        let mut contents = String::new();
+        buf_reader.read_to_string(&mut contents)
+            .expect("Error reading to string");
+        contents
+    }
+
+    fn get_output_filepath(&self, path: &PathBuf) -> PathBuf {
+        let mut output_path = path.clone();
+        let mut output_file_name = path.file_name().unwrap()
+            .to_str().unwrap().to_string();
+        let end_idx = output_file_name.len() - self.input_extension.len() - 1;
+        output_file_name = output_file_name[..end_idx].to_string();
+        output_path.set_file_name(output_file_name);
+        output_path.set_extension(self.output_extension);
+        output_path
+    }
+
+    fn get_writeable_file(&self, path: &PathBuf) -> fs::File {
+        fs::File::create(&path).unwrap()
+    }
+
+    fn get_path_string(&self, path: &PathBuf) -> String {
+        path.as_path().to_str().unwrap().to_string()
+    }
+}
+
+
+
+// *****************************************
+//     COMPUTATION ENGINE
+// *****************************************
+#[derive(Debug)]
+struct ComputationEngine<> {
+    // fns:
+    // - compile_class
+    // - compile_class_var_dec
+    // - compile_subroutine
+    // - compile_parameterlist
+    // - compile_var_dec
+    // - compile_statements
+    // - compile_do
+    // - compile_let
+    // - compile_while
+    // - compile_return
+    // - compile_if
+    // - compile_expression
+    // - compile_term
+    // - compile_expression_list
+
+
+    
 }
 
 
@@ -329,8 +514,16 @@ impl VmWriter {
 }
 
 
-
+// *****************************************
+//     MAIN
+// *****************************************
 fn main() {
+    let file_parser = FileParser::from_user_args("jack", "vm");
+    let input_filepaths = file_parser.get_filepaths();
+    for file_path in input_filepaths {
+        
+    }
+
     let mut symbol_table = SymbolTable{
         ClassScope: HashMap::new(),
         SubrScope: HashMap::new(),
@@ -339,3 +532,9 @@ fn main() {
     symbol_table.define("test".to_string(), "fuck".to_string(), Kind::ARGUMENT);
     println!("{:?}", symbol_table);
 }
+
+    // - get_filepaths
+    // - get_file_contents (args: path)
+    // - get_output_filepath (args: path)
+    // - get_writeable_file (args: path)
+    // - get_path_string (args: file)
