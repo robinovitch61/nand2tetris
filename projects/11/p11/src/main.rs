@@ -28,7 +28,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 use std::env;
 use std::collections::HashSet;
-use std::collections::VecDeque;
+// use std::collections::Vec;
 use std::collections::HashMap;
 
 use regex::Regex;
@@ -188,13 +188,13 @@ impl<'a> FileParser<'a> {
         (&mod_line[0..idx_comment].trim(), mod_comment)
     }
 
-    fn tokenize_for_jack(&self, file_contents: String) -> VecDeque<String> {
-        fn add_tokens(line: &str, tokens: &mut VecDeque<String>) {
+    fn tokenize_for_jack(&self, file_contents: String) -> Vec<String> {
+        fn add_tokens(line: &str, tokens: &mut Vec<String>) {
             let mut rest = line;
             while rest != "" {
                 let (token, idx) = find_next(rest);
                 rest = &rest[idx..].trim();
-                tokens.push_back(token.to_string());
+                tokens.push(token.to_string());
             }
         }
 
@@ -233,7 +233,7 @@ impl<'a> FileParser<'a> {
         }
 
         let mut is_comment = false;
-        let mut tokens: VecDeque<String> = VecDeque::new();
+        let mut tokens: Vec<String> = Vec::new();
         for line in file_contents.lines() {
             let (clean_line, comment) = self.remove_comments(line, is_comment);
             is_comment = comment;
@@ -296,29 +296,25 @@ struct JackTokenizer<'a> {
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
-    tokens: VecDeque<String>,
+    tokens: Vec<String>,
     index: usize,
     valid_keywords: Vec<&'a str>,
     valid_symbols: Vec<&'a str>,
+    builtin_types: Vec<&'a str>,
 }
 
 impl<'a> Default for JackTokenizer<'a> {
-    // fn from_file_contents(file_contents: String) -> JackTokenizer {
-    //     JackTokenizer {
-
-    //     }
-    // }
 
     fn default() -> JackTokenizer<'a> {
         JackTokenizer {
-            tokens: VecDeque::new(),
+            tokens: Vec::new(),
             index: 0,
             valid_keywords: vec!["class", "constructor", "function", "method", "field",
             "static", "var", "int", "char", "boolean", "void", "true", "false",
             "null", "this", "let", "do", "if", "else", "while", "return"],
             valid_symbols: vec!["{", "}", "(", ")", "[", "]", ".",
             ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"],
-
+            builtin_types: vec!["int", "boolean", "char"],
         }
     }
 }
@@ -381,42 +377,10 @@ impl<'a> JackTokenizer<'a> {
 
 
 // *****************************************
-//     COMPILATION ENGINE
-// *****************************************
-#[derive(Debug)]
-struct CompilationEngine<'a> {
-    // fns:
-    // - compile_class
-    // - compile_class_var_dec
-    // - compile_subroutine
-    // - compile_parameterlist
-    // - compile_var_dec
-    // - compile_statements
-    // - compile_do
-    // - compile_let
-    // - compile_while
-    // - compile_return
-    // - compile_if
-    // - compile_expression
-    // - compile_term
-    // - compile_expression_list
-    
-    tokenizer: JackTokenizer<'a>,
-    output_file: fs::File,
-    symbol_table: SymbolTable
-}
-
-impl<'a> CompilationEngine<'a> {
-    fn compile_class(&self) {
-    }
-}
-
-// *****************************************
 //     SYMBOL TABLE
 // *****************************************
 #[derive(PartialEq, Debug, Clone, Copy)]
 enum Kind {
-    NONE,
     FIELD,
     STATIC,
     ARGUMENT,
@@ -437,7 +401,7 @@ struct SymbolTable<> {
     // - start_subroutine (reset subroutine scope) X
     // - define (args: name, type, kind) -- assigns scope and index X
     // - var_count (args: kind) -- returns number of vars of kind defined X
-    // - kind_of (args: name) -- returns kind of var or NONE X
+    // - kind_of (args: name) -- returns kind of var
     // - type_of (args: name) -- returns type of var X
     // - index_of (args: name) -- returns index of var X
     SubrScope: HashMap<String, Identifier>,
@@ -479,19 +443,16 @@ impl SymbolTable {
                     self.SubrScope.insert(name.clone(), Identifier { name, symbol_type, symbol_kind, id });
                 }
             }
-            Kind::NONE => {
-                
-            }
         }
     }
 
-    fn kind_of(&self, name: String) -> Kind {
+    fn kind_of(&self, name: String) -> Option::<Kind> {
         if self.SubrScope.contains_key(&name) {
-            self.SubrScope.get(&name).unwrap().symbol_kind
+            Some(self.SubrScope.get(&name).unwrap().symbol_kind)
         } else if self.ClassScope.contains_key(&name) {
-            self.ClassScope.get(&name).unwrap().symbol_kind
+            Some(self.ClassScope.get(&name).unwrap().symbol_kind)
         } else {
-            Kind::NONE
+            None
         }
     }
 
@@ -645,6 +606,155 @@ impl VmWriter {
 
 
 // *****************************************
+//     COMPILATION ENGINE
+// *****************************************
+#[derive(Debug)]
+struct CompilationEngine<'a> {
+    // fns:
+    // - compile_class
+    // - compile_class_var_dec
+    // - compile_subroutine
+    // - compile_parameterlist
+    // - compile_var_dec
+    // - compile_statements
+    // - compile_do
+    // - compile_let
+    // - compile_while
+    // - compile_return
+    // - compile_if
+    // - compile_expression
+    // - compile_term
+    // - compile_expression_list
+    
+    tokenizer: JackTokenizer<'a>,
+    symbol_table: SymbolTable,
+    output_file: fs::File,
+}
+
+impl<'a> CompilationEngine<'a> {
+
+    fn write_line(&mut self, line: &str) {
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
+            .expect("Failed to write line to file!");
+    }
+
+    fn compile_class(&mut self) {
+        self.write_line("<class>");
+
+        // 'class'
+        assert_eq!(self.tokenizer.keyword(), "class");
+        self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+        self.tokenizer.advance();
+
+        // className
+        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+        self.tokenizer.advance();
+
+        // '{'
+        assert_eq!(self.tokenizer.symbol(), "{");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // classVarDec
+        self.compile_class_var_dec();
+
+        // subroutine
+        self.compile_subroutine();
+
+        // '}'
+        assert_eq!(self.tokenizer.symbol(), "}");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        self.write_line("</class>");
+    }
+
+    fn compile_class_var_dec(&mut self) {
+        loop {
+            if self.tokenizer.token_type() != TokenType::KEYWORD
+            || !vec!["static", "field"].contains(&self.tokenizer.keyword()) {
+                return;
+            }
+            
+            // MORE TODO
+        }
+    }
+
+    fn compile_subroutine(&mut self) {
+        loop {
+            // ('constructor' | 'function' | 'method')
+            if self.tokenizer.token_type() != TokenType::KEYWORD
+            || !vec!["constructor", "function", "method"].contains(&self.tokenizer.keyword()) {
+                return;
+            }
+            self.symbol_table.start_subroutine(); // clear subroutine scope
+            self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+            self.tokenizer.advance();
+
+            // ('void' | type)
+            match self.tokenizer.token_type() {
+                TokenType::KEYWORD => {
+                    assert_eq!(self.tokenizer.keyword(), "void");
+                    self.write_line(&format!("<keyword> {} </keyword>",
+                        self.tokenizer.keyword()));
+                },
+                // TokenType::IDENTIFIER => {
+                //     self.write_line(&format!("<keyword> {} </keyword>",
+                //         self.tokenizer.keyword()));
+                // },
+                _ => panic!("Invalid subroutine declaration")
+            }
+            self.tokenizer.advance();
+        }
+    }
+
+    fn compile_parameterlist(&mut self) {
+
+    }
+
+    fn compile_var_dec(&mut self) {
+
+    }
+
+    fn compile_statements(&mut self) {
+
+    }
+
+    fn compile_do(&mut self) {
+
+    }
+
+    fn compile_let(&mut self) {
+
+    }
+
+    fn compile_while(&mut self) {
+
+    }
+
+    fn compile_return(&mut self) {
+
+    }
+
+    fn compile_if(&mut self) {
+
+    }
+
+    fn compile_expression(&mut self) {
+
+    }
+
+    fn compile_term(&mut self) {
+
+    }
+
+    fn compile_expression_list(&mut self) {
+
+    }
+}
+
+
+// *****************************************
 //     MAIN
 // *****************************************
 fn main() {
@@ -655,7 +765,7 @@ fn main() {
         let output_path = &file_parser.get_output_filepath(input_path);
         let input_path_string = file_parser.get_path_string(input_path);
         let output_path_string = file_parser.get_path_string(output_path);
-        println!("Compiling {} to {}...", input_path_string, output_path_string);
+        println!("Compiling {} to {}", input_path_string, output_path_string);
 
         // file i/o
         let output_file = file_parser.get_writeable_file(output_path);
@@ -672,17 +782,9 @@ fn main() {
         };
 
         // create compilation engine and compile
-        let compiler = CompilationEngine{ tokenizer, output_file, symbol_table };
+        let mut compiler = CompilationEngine{
+            tokenizer, symbol_table, output_file
+        };
         compiler.compile_class();
     }
-
-
-
-    // symbol_table.define("test".to_string(), "woops".to_string(), Kind::ARGUMENT);
 }
-
-    // - get_filepaths
-    // - get_file_contents (args: path)
-    // - get_output_filepath (args: path)
-    // - get_writeable_file (args: path)
-    // - get_path_string (args: file)
