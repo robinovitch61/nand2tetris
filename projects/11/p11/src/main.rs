@@ -87,13 +87,19 @@ struct JackTokenizer<'a> {
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
-    tokens: VecDeque<&'a str>,
+    tokens: VecDeque<String>,
     index: usize,
     valid_keywords: Vec<&'a str>,
     valid_symbols: Vec<&'a str>,
 }
 
 impl<'a> Default for JackTokenizer<'a> {
+    // fn from_file_contents(file_contents: String) -> JackTokenizer {
+    //     JackTokenizer {
+
+    //     }
+    // }
+
     fn default() -> JackTokenizer<'a> {
         JackTokenizer {
             tokens: VecDeque::new(),
@@ -118,7 +124,7 @@ impl<'a> JackTokenizer<'a> {
     }
 
     fn curr_token(&self) -> &str {
-        self.tokens[self.index]
+        &self.tokens[self.index]
     }
 
     fn token_type(&self) -> TokenType {
@@ -176,7 +182,9 @@ struct FileParser<'a> {
     // - get_output_filepath (args: path)
     // - get_writeable_file (args: path)
     // - get_path_string (args: file)
-    input_path: &'a str,
+    // - remove_comments (args: line, is_comment)
+    // - tokenize_for_jack (args: file_contents)
+    input_path: String,
     input_extension: &'a str,
     output_extension: &'a str,
 }
@@ -190,25 +198,26 @@ impl<'a> FileParser<'a> {
             println!("Usage: cargo run FILENAME\n");
             panic!();
         };
+        let input_path = args[1].clone();
         FileParser {
-            input_path: &args[1],
+            input_path,
             input_extension,
             output_extension,
         }
     }
 
     fn get_filepaths(&self) -> Vec<PathBuf> {
-        match PathBuf::from(self.input_path).extension() {
+        match PathBuf::from(&self.input_path).extension() {
             Some(ext) => {
                 if ext == self.input_extension {
-                    return vec![PathBuf::from(self.input_path)];
+                    return vec![PathBuf::from(&self.input_path)];
                 } else {
                     panic!(format!("Invalid non-.{} input found",
                         self.input_extension));
                 }
             }
             _ => {
-                let paths = fs::read_dir(self.input_path).unwrap();
+                let paths = fs::read_dir(&self.input_path).unwrap();
     
                 let mut ext_paths: Vec<PathBuf> = Vec::new();
                 for direntry in paths {
@@ -250,6 +259,123 @@ impl<'a> FileParser<'a> {
 
     fn get_path_string(&self, path: &PathBuf) -> String {
         path.as_path().to_str().unwrap().to_string()
+    }
+
+    fn remove_comments(&'a self, line: &'a str, is_comment: bool) -> (&'a str, bool) {
+        let mut mod_line = line;
+        let mut mod_comment = is_comment;
+
+        // TODO: add removal of "/* a comment */"
+
+        // check if line begins multi-line comment '/**'
+        let idx_start_ml: i32 = match mod_line.find("/**") {
+            Some(idx) => idx as i32,
+            _ => -1
+        };
+        // not a comment and "/**" found: keep up to the start of the multiline comment
+        if !mod_comment && idx_start_ml != -1 {
+            // check for end of multi-line comment, '*/'
+            let idx_end_ml: i32 = match mod_line.find("*/") {
+                Some(idx) => idx as i32,
+                _ => -1
+            };
+            mod_line = &mod_line[..idx_start_ml as usize];
+            // '*/' found
+            if idx_end_ml != -1 {
+                mod_comment = false;
+            } else {
+                mod_comment = true;
+            }
+        // no "/**" and continues comment from a previous line:
+        } else if mod_comment {
+            // check for end of multi-line comment, '*/'
+            let idx_end_ml: i32 = match line.find("*/") {
+                Some(idx) => idx as i32,
+                _ => -1
+            };
+            // if "*/" found: take rest of line past "*/"
+            if idx_end_ml != -1 {
+                mod_line = &mod_line[idx_end_ml as usize..];
+                mod_comment = false;
+            // no "*/" found, is comment: kill line
+            } else {
+                mod_line = "";
+            }
+        }
+
+        // check for end of multi-line comment, '*/'
+        let idx_end_ml: i32 = match mod_line.find("*/") {
+            Some(idx) => idx as i32,
+            _ => -1
+        };
+        // '*/' found
+        if idx_end_ml != -1 {
+            mod_line = &mod_line[idx_end_ml as usize + 2..];
+            mod_comment = false;
+        }
+
+        // find the index where // comments begin on the line
+        let idx_comment = match mod_line.find("//") {
+            Some(idx) => idx,
+            _ => mod_line.len()
+        };
+
+        (&mod_line[0..idx_comment].trim(), mod_comment)
+    }
+
+    fn tokenize_for_jack(&self, file_contents: String) -> VecDeque<String> {
+        fn add_tokens(line: &str, tokens: &mut VecDeque<String>) {
+            let mut rest = line;
+            while rest != "" {
+                let (token, idx) = find_next(rest);
+                rest = &rest[idx..].trim();
+                tokens.push_back(token.to_string());
+            }
+        }
+
+        fn find_next(line: &str) -> (&str, usize) {
+            lazy_static! { // lazy_static ensures compilation only happens once
+                static ref RE : Regex = Regex::new(
+                        r####"(?x)
+                        # keyword
+                        ^(\bclass\b|\bconstructor\b|\bfunction\b|\bmethod\b|\bfield\b
+                        |\bstatic\b|\bvar\b|\bint\b|\bchar\b|\bboolean\b|\bvoid\b|\btrue\b|\bfalse\b
+                        |\bnull\b|\bthis\b|\blet\b|\bdo\b|\bif\b|\belse\b|\bwhile\b|\breturn\b
+        
+                        # symbol
+                        |[{]|[}]|[(]|[)]|\[|\]|[.]|
+                        [,]|[;]|[+]|[-]|[*]|[/]|[&]|
+                        [|]|[<]|[>]|[=]|[~]
+        
+                        # integerConstant
+                        |\d{1,5}
+        
+                        # StringConstant
+                        |"[^"\n]+"
+        
+                        # identifier
+                        |[a-zA-Z0-9_:]+)
+                        "####
+                    ).unwrap();
+            };
+        
+            let capture = match RE.find(line){
+                Some(cap) => cap,
+                _ => panic!("No token found")
+            };
+            let token = &line[capture.start()..capture.end()];
+            (token, capture.end())
+        }
+
+        let mut is_comment = false;
+        let mut tokens: VecDeque<String> = VecDeque::new();
+        for line in file_contents.lines() {
+            let (clean_line, comment) = self.remove_comments(line, is_comment);
+            is_comment = comment;
+            if clean_line == "" { continue };
+            add_tokens(clean_line, &mut tokens);
+        }
+        tokens
     }
 }
 
@@ -519,9 +645,19 @@ impl VmWriter {
 // *****************************************
 fn main() {
     let file_parser = FileParser::from_user_args("jack", "vm");
-    let input_filepaths = file_parser.get_filepaths();
-    for file_path in input_filepaths {
+    let input_paths = file_parser.get_filepaths();
+    for input_path in &input_paths {
+        let input_path_string = file_parser.get_path_string(input_path);
+        let output_path = &file_parser.get_output_filepath(input_path);
+        let output_path_string = file_parser.get_path_string(output_path);
+        println!("Compiling {} to {}...", input_path_string, output_path_string);
         
+        let output_file = file_parser.get_writeable_file(output_path);
+        let file_contents = file_parser.get_file_contents(input_path);
+        let tokens = file_parser.tokenize_for_jack(file_contents);
+
+        let tokenizer = JackTokenizer{ tokens, ..Default::default() };
+
     }
 
     let mut symbol_table = SymbolTable{
