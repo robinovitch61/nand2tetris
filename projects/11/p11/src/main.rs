@@ -288,10 +288,15 @@ struct JackTokenizer<'a> {
     // - has_more_tokens -- returns bool
     // - advance -- advances index if has_more_tokens
     // - token_type -- returns TokenType of current token
+    // - is_keyword
     // - keyword -- returns keyword of current token (TokenType::KEYWORD only)
+    // - is_symbol
     // - symbol -- returns symbol of current token (TokenType::SYMBOL only)
+    // - is_identifier
     // - identifier -- returns identifier of current token (TokenType::IDENTIFIER only)
+    // - is_int_val
     // - int_val -- returns integer value of current token (TokenType::INT_CONST only)
+    // - is_string_val
     // - string_val -- returns string value of current token (TokenType::STRING_CONST only)
 
     // lifetime means a JackTokenizer instance can't
@@ -348,28 +353,48 @@ impl<'a> JackTokenizer<'a> {
         }
     }
 
+    fn is_keyword(&self) -> bool {
+        self.token_type() == TokenType::KEYWORD
+    }
+
     fn keyword(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::KEYWORD);
+        assert!(self.is_keyword());
         self.curr_token()
+    }
+
+    fn is_symbol(&self) -> bool {
+        self.token_type() == TokenType::SYMBOL
     }
 
     fn symbol(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::SYMBOL);
+        assert!(self.is_symbol());
         self.curr_token()
+    }
+
+    fn is_identifier(&self) -> bool {
+        self.token_type() == TokenType::IDENTIFIER
     }
 
     fn identifier(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::IDENTIFIER);
+        assert!(self.is_identifier());
         self.curr_token()
+    }
+
+    fn is_int_val(&self) -> bool {
+        self.token_type() == TokenType::INT_CONST
     }
 
     fn int_val(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::INT_CONST);
+        assert!(self.is_int_val());
         self.curr_token()
     }
 
+    fn is_string_val(&self) -> bool {
+        self.token_type() == TokenType::STRING_CONST
+    }
+
     fn string_val(&self) -> &str {
-        assert_eq!(self.token_type(), TokenType::STRING_CONST);
+        assert!(self.is_string_val());
         let token = self.curr_token();
         &token[1..token.len()-2]
     }
@@ -671,7 +696,7 @@ impl<'a> CompilationEngine<'a> {
 
     fn compile_class_var_dec(&mut self) {
         loop {
-            if self.tokenizer.token_type() != TokenType::KEYWORD
+            if !self.tokenizer.is_keyword()
             || !vec!["static", "field"].contains(&self.tokenizer.keyword()) {
                 return;
             }
@@ -683,7 +708,7 @@ impl<'a> CompilationEngine<'a> {
     fn compile_subroutine(&mut self) {
         loop {
             // ('constructor' | 'function' | 'method')
-            if self.tokenizer.token_type() != TokenType::KEYWORD
+            if !self.tokenizer.is_keyword()
             || !vec!["constructor", "function", "method"].contains(&self.tokenizer.keyword()) {
                 return;
             }
@@ -692,18 +717,51 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // ('void' | type)
-            match self.tokenizer.token_type() {
-                TokenType::KEYWORD => {
-                    assert_eq!(self.tokenizer.keyword(), "void");
-                    self.write_line(&format!("<keyword> {} </keyword>",
-                        self.tokenizer.keyword()));
-                },
-                // TokenType::IDENTIFIER => {
-                //     self.write_line(&format!("<keyword> {} </keyword>",
-                //         self.tokenizer.keyword()));
-                // },
-                _ => panic!("Invalid subroutine declaration")
+            if self.tokenizer.is_keyword() && self.tokenizer.keyword() == "void" {
+                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+            // keyword is builtin type
+            } else if self.tokenizer.is_keyword()
+                && self.tokenizer.builtin_types.contains(&self.tokenizer.keyword()) {
+                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
+            // identifier assumed to be user defined type
+            } else if self.tokenizer.is_identifier() { 
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
+            } else {
+                panic!("Invalid type in subroutine declaration");
             }
+            self.tokenizer.advance();
+
+            // subroutineName
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // '('
+            assert_eq!(self.tokenizer.symbol(), "(");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // parameterList
+            self.compile_parameterlist();
+
+            // ')'
+            assert_eq!(self.tokenizer.symbol(), ")");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+           // '{'
+            assert_eq!(self.tokenizer.symbol(), "{");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+            
+            // varDec*
+            self.compile_var_dec();
+
+            // statements
+            self.compile_statements();
+
+            // '}'
+            assert_eq!(self.tokenizer.symbol(), "}");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
         }
     }
