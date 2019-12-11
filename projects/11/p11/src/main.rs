@@ -279,6 +279,7 @@ struct JackTokenizer<'a> {
     // - is_builtin_unary_op
     // - math_command -- returns the MathCommand of a given op
     // - unary_math_command -- returns the UnaryMathCommand of a given op
+    // - extract_dot_subroutine -- returns the subroutine name for things like (className|varName).subroutineName
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
@@ -292,7 +293,6 @@ struct JackTokenizer<'a> {
 }
 
 impl<'a> Default for JackTokenizer<'a> {
-
     fn default() -> JackTokenizer<'a> {
         JackTokenizer {
             tokens: Vec::new(),
@@ -429,6 +429,19 @@ impl<'a> JackTokenizer<'a> {
             _ => panic!("Invalid symbol for unary math command")
         }
     }
+
+    fn kind_to_segment(&self, kind: Kind) -> Segment {
+        match kind {
+            Kind::STATIC => Segment::STATIC,
+            Kind::ARGUMENT => Segment::ARG,
+            Kind::FIELD => Segment::THIS,
+            Kind::VAR => Segment::LOCAL,
+        }
+    }
+
+    fn extract_dot_subroutine(&self) -> String {
+        self.tokens[self.index..self.index+3].join("")
+    }
 }
 
 
@@ -448,7 +461,7 @@ struct Identifier<> {
     name: String,
     symbol_type: String,
     symbol_kind: Kind,
-    id: u16,
+    id: u32,
 }
 
 #[derive(Debug)]
@@ -460,6 +473,7 @@ struct SymbolTable<> {
     // - kind_of (args: name) -- returns kind of var
     // - type_of (args: name) -- returns type of var X
     // - index_of (args: name) -- returns index of var X
+    //// - contains (args: name) -- returns bool
     SubrScope: HashMap<String, Identifier>,
     ClassScope: HashMap<String, Identifier>,
 }
@@ -469,7 +483,7 @@ impl SymbolTable {
         self.SubrScope.retain(|k, _| k == "");
     }
 
-    fn var_count(&self, symbol_kind: Kind) -> u16 {
+    fn var_count(&self, symbol_kind: Kind) -> u32 {
         let mut count_kind = 0;
         for (_, v) in self.SubrScope.iter() {
             if v.symbol_kind == symbol_kind {
@@ -514,35 +528,39 @@ impl SymbolTable {
         }
     }
 
-    fn kind_of(&self, name: String) -> Option::<Kind> {
-        if self.SubrScope.contains_key(&name) {
-            Some(self.SubrScope.get(&name).unwrap().symbol_kind)
-        } else if self.ClassScope.contains_key(&name) {
-            Some(self.ClassScope.get(&name).unwrap().symbol_kind)
+    fn kind_of(&self, name: &str) -> Kind {
+        if self.SubrScope.contains_key(name) {
+            self.SubrScope.get(name).unwrap().symbol_kind
+        } else if self.ClassScope.contains_key(name) {
+            self.ClassScope.get(name).unwrap().symbol_kind
         } else {
-            None
+            panic!("Tried to get kind of something not in symbol table");
         }
     }
 
-    fn type_of(&self, name: String) -> String {
-        if self.SubrScope.contains_key(&name) {
-            self.SubrScope.get(&name).unwrap().symbol_type.clone()
-        } else if self.ClassScope.contains_key(&name) {
-            self.ClassScope.get(&name).unwrap().symbol_type.clone()
+    fn type_of(&self, name: &str) -> String {
+        if self.SubrScope.contains_key(name) {
+            self.SubrScope.get(name).unwrap().symbol_type.to_string()
+        } else if self.ClassScope.contains_key(name) {
+            self.ClassScope.get(name).unwrap().symbol_type.to_string()
         } else {
             panic!("Tried to get type of something not in symbol table!");
         }
     }
 
-    fn index_of(&self, name: String) -> u16 {
-        if self.SubrScope.contains_key(&name) {
-            self.SubrScope.get(&name).unwrap().id
-        } else if self.ClassScope.contains_key(&name) {
-            self.ClassScope.get(&name).unwrap().id
+    fn index_of(&self, name: &str) -> u32 {
+        if self.SubrScope.contains_key(name) {
+            self.SubrScope.get(name).unwrap().id
+        } else if self.ClassScope.contains_key(name) {
+            self.ClassScope.get(name).unwrap().id
         } else {
             panic!("Tried to get id of something not in symbol table!");
         }
     }
+
+    // fn contains(&self, name: &str) -> bool {
+    //     self.SubrScope.contains_key(name) || self.ClassScope.contains_key(name)
+    // }
 }
 
 
@@ -715,7 +733,10 @@ struct CompilationEngine<'a> {
     tokenizer: JackTokenizer<'a>,
     symbol_table: SymbolTable,
     vm_writer: VmWriter<'a>,
-    output_file: &'a fs::File,
+    output_file: &'a fs::File, // remove later
+    num_args: u8,
+    num_locals: u8,
+    class_name: String,
 }
 
 impl<'a> CompilationEngine<'a> {
@@ -739,20 +760,21 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_class(&mut self) {
-        self.write_line("<class>");
+        // self.write_line("<class>");
 
         // 'class'
         assert_eq!(self.tokenizer.keyword(), "class");
-        self.write_line("<keyword> class </keyword>");
+        // self.write_line("<keyword> class </keyword>");
         self.tokenizer.advance();
 
         // className
-        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+        self.class_name = self.tokenizer.curr_token().to_string();
+        // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
         self.tokenizer.advance();
 
         // '{'
         assert_eq!(self.tokenizer.symbol(), "{");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // classVarDec
@@ -763,9 +785,9 @@ impl<'a> CompilationEngine<'a> {
 
         // '}'
         assert_eq!(self.tokenizer.symbol(), "}");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
 
-        self.write_line("</class>");
+        // self.write_line("</class>");
     }
 
     fn compile_class_var_dec(&mut self) {
@@ -817,27 +839,29 @@ impl<'a> CompilationEngine<'a> {
         while vec!["constructor", "function", "method"].contains(&self.tokenizer.curr_token()) {
             self.symbol_table.start_subroutine(); // clear subroutine scope
 
-            self.write_line("<subroutineDec>");
+            // self.write_line("<subroutineDec>");
 
             // ('constructor' | 'function' | 'method')
-            self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+            let function_declared = self.tokenizer.curr_token() == "function";
+            // self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
             self.tokenizer.advance();
 
             // ('void' | type)
-            if self.tokenizer.curr_token() == "void" {
-                self.write_line("<keyword> void </keyword>");
-            } else {
-                self.write_nonvoid_type();
-            }
+            // if self.tokenizer.curr_token() == "void" {
+                // self.write_line("<keyword> void </keyword>");
+            // } else {
+                // self.write_nonvoid_type();
+            // }
             self.tokenizer.advance();
 
             // subroutineName
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
+            // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // '('
             assert_eq!(self.tokenizer.symbol(), "(");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // parameterList
@@ -857,6 +881,10 @@ impl<'a> CompilationEngine<'a> {
             
             // varDec*
             self.compile_var_dec();
+
+            if function_declared {
+                self.vm_writer.write_function(&function_name, self.num_locals)
+            }
 
             // statements
             self.compile_statements();
@@ -911,10 +939,11 @@ impl<'a> CompilationEngine<'a> {
 
     fn compile_var_dec(&mut self) {
         while self.tokenizer.curr_token() == "var" {
-            self.write_line("<varDec>");
+            self.num_locals = 1;
+
             // 'var'
             assert_eq!(self.tokenizer.keyword(), "var");
-            self.write_line("<keyword> var </keyword>");
+            // self.write_line("<keyword> var </keyword>");
             self.tokenizer.advance();
 
             // type
@@ -925,26 +954,28 @@ impl<'a> CompilationEngine<'a> {
             // varName
             let name = self.tokenizer.curr_token().to_string();
             self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // (',' varName)*
             while self.tokenizer.curr_token() == "," {
+                self.num_locals += 1;
+
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // varName
                 let name = self.tokenizer.curr_token().to_string();
                 self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                 self.tokenizer.advance();
             }
 
             // ';'
             assert_eq!(self.tokenizer.symbol(), ";");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             self.write_line("</varDec>");
@@ -970,8 +1001,6 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_do(&mut self) {
-        self.write_line("<doStatement>");
-
         // 'do'
         assert_eq!(self.tokenizer.keyword(), "do");
         self.write_line("<keyword> do </keyword>");
@@ -985,7 +1014,8 @@ impl<'a> CompilationEngine<'a> {
         self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
-        self.write_line("</doStatement>");
+        // get rid of return value
+        self.vm_writer.write_pop(Segment::TEMP, 0);
     }
 
     fn compile_let(&mut self) {
@@ -1070,24 +1100,23 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_return(&mut self) {
-        self.write_line("<returnStatement>");
-
         // 'return'
         assert_eq!(self.tokenizer.keyword(), "return");
-        self.write_line("<keyword> return </keyword>");
         self.tokenizer.advance();
 
         // expression?
         if self.tokenizer.curr_token() != ";" {
             self.compile_expression();
+        } else {
+            // void function, push dummy value to stack
+            self.vm_writer.write_push(Segment::CONST, 0);
         }
 
         // ';'
         assert_eq!(self.tokenizer.symbol(), ";");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
-        self.write_line("</returnStatement>");
+        self.vm_writer.write_return();
     }
 
     fn compile_if(&mut self) {
@@ -1206,6 +1235,10 @@ impl<'a> CompilationEngine<'a> {
                         self.compile_subroutine_call();
                     },
                     _ => { // varName
+                        let kind = self.symbol_table.kind_of(self.tokenizer.curr_token());
+                        let index = self.symbol_table.index_of(self.tokenizer.curr_token());
+                        let segment = self.tokenizer.kind_to_segment(kind);
+                        self.vm_writer.write_push(segment, index);
                         self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                         self.tokenizer.advance();
                     }
@@ -1228,11 +1261,13 @@ impl<'a> CompilationEngine<'a> {
 
                 } else if self.tokenizer.is_builtin_unary_op() {
                     // unaryOp
-                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                    let unary_math_command = self.tokenizer.unary_math_command();
                     self.tokenizer.advance();
 
                     // term
                     self.compile_term();
+
+                    self.vm_writer.write_unary_arithmetic(unary_math_command);
                 } else {
                     panic!("Invalid symbol in term");
                 }
@@ -1244,18 +1279,18 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_expression_list(&mut self) {
-        let mut n_args = 0;
+        self.num_args = 0;
         self.write_line("<expressionList>");
 
         if self.tokenizer.curr_token() != ")" {
-            n_args += 1;
+            self.num_args += 1;
 
             // expression
             self.compile_expression();
 
             // (',' expression)*
             while self.tokenizer.curr_token() == "," {
-                n_args += 1;
+                self.num_args += 1;
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
@@ -1268,13 +1303,14 @@ impl<'a> CompilationEngine<'a> {
         }
 
         // self.vm_writer.write_call("add or Math.multiply etc.", n_args); // GET NARGS HERE
-        self.write_line(&format!("<nargs: {} /expressionList>", n_args));
+        self.write_line(&format!("<nargs: {} /expressionList>", self.num_args));
     }
 
     fn compile_subroutine_call(&mut self) {
         // subroutineName '(' expressionList ')'
         if self.tokenizer.next_token() == "(" {
             // subroutineName
+            let subroutine_name = self.tokenizer.curr_token().to_string();
             self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
@@ -1290,10 +1326,13 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), ")");
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
+
+            self.vm_writer.write_call(&subroutine_name, self.num_args);
         }
         // (className | varName) '.' subroutineName '(' expressionList ')'
         else if self.tokenizer.next_token() == "." { 
             // (className | varName)
+            let subroutine_name = self.tokenizer.extract_dot_subroutine();
             self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
@@ -1318,6 +1357,8 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), ")");
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
+
+            self.vm_writer.write_call(&subroutine_name, self.num_args);
         } else {
             panic!("Invalid subroutine call");
         }
@@ -1348,14 +1389,20 @@ fn main() {
         let tokenizer = JackTokenizer{ tokens, ..Default::default() };
 
         // new symbol table
-        let mut symbol_table = SymbolTable{
+        let symbol_table = SymbolTable{
             ClassScope: HashMap::new(),
             SubrScope: HashMap::new(),
         };
 
         // create compilation engine and compile
-        let mut compiler = CompilationEngine{ // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
-            tokenizer, symbol_table, vm_writer, output_file
+        let mut compiler = CompilationEngine{
+            tokenizer, 
+            symbol_table,
+            vm_writer,
+            output_file, // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
+            num_args: 0,
+            num_locals: 0,
+            class_name: "".to_string(),
         };
         compiler.compile_class();
     }
