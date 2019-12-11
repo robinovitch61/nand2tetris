@@ -21,14 +21,13 @@
 #![allow(clippy::cognitive_complexity)]
 #![allow(non_snake_case)]
 #![allow(clippy::too_many_arguments)]
+#![allow(non_camel_case_types)]
 
 use std::fs;
 use std::path::PathBuf;
 use std::io::BufReader;
 use std::io::prelude::*;
 use std::env;
-use std::collections::HashSet;
-// use std::collections::Vec;
 use std::collections::HashMap;
 
 use regex::Regex;
@@ -257,36 +256,13 @@ enum TokenKind {
     STRING_CONST,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum KwType {
-    CLASS,
-    METHOD,
-    FUNCTION,
-    CONSTRUCTOR,
-    INT,
-    BOOLEAN,
-    CHAR,
-    VOID,
-    VAR,
-    STATIC,
-    FIELD,
-    LET,
-    DO,
-    IF,
-    ELSE,
-    WHILE,
-    RETURN,
-    TRUE,
-    FALSE,
-    NULL,
-    THIS,
-}
-
 #[derive(Debug)]
 struct JackTokenizer<'a> {
     // fns:
     // - has_more_tokens -- returns bool
     // - advance -- advances index if has_more_tokens
+    // - curr_token -- return current token
+    // - next_token -- return next token
     // - token_kind -- returns TokenKind of current token
     // - is_keyword
     // - keyword -- returns keyword of current token (TokenKind::KEYWORD only)
@@ -299,6 +275,8 @@ struct JackTokenizer<'a> {
     // - is_string_val
     // - string_val -- returns string value of current token (TokenKind::STRING_CONST only)
     // - is_builtin_type
+    // - is_builtin_op
+    // - is_builtin_unary_op
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
@@ -307,6 +285,8 @@ struct JackTokenizer<'a> {
     valid_keywords: Vec<&'a str>,
     valid_symbols: Vec<&'a str>,
     builtin_types: Vec<&'a str>,
+    builtin_ops: Vec<&'a str>,
+    builtin_unary_ops: Vec<&'a str>,
 }
 
 impl<'a> Default for JackTokenizer<'a> {
@@ -321,21 +301,31 @@ impl<'a> Default for JackTokenizer<'a> {
             valid_symbols: vec!["{", "}", "(", ")", "[", "]", ".",
             ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"],
             builtin_types: vec!["int", "boolean", "char"],
+            builtin_ops: vec!["+", "-", "*", "/", "&", "|", "<", ">", "="],
+            builtin_unary_ops: vec!["~", "-"],
         }
     }
 }
 
 impl<'a> JackTokenizer<'a> {
     fn has_more_tokens(&self) -> bool {
-        self.index > self.tokens.len()
+        self.index < self.tokens.len() - 1
     }
 
     fn advance(&mut self) {
-        self.index += 1;
+        if self.has_more_tokens() {
+            self.index += 1;
+        } else {
+            panic!("Out of tokens -- unfinished code?");
+        }
     }
 
     fn curr_token(&self) -> &str {
         &self.tokens[self.index]
+    }
+
+    fn next_token(&self) -> &str {
+        &self.tokens[self.index + 1]
     }
 
     fn token_kind(&self) -> TokenKind {
@@ -348,7 +338,11 @@ impl<'a> JackTokenizer<'a> {
                 && token.chars().nth(token.len()-1).unwrap() == '"' {
             TokenKind::STRING_CONST
         } else if token.parse::<u32>().is_ok() {
-            TokenKind::INT_CONST
+            if token.parse::<u32>().unwrap() > 32767 {
+                panic!("Integer larger than 32767");
+            } else {
+                TokenKind::INT_CONST
+            }
         } else {
             TokenKind::IDENTIFIER
         }
@@ -403,6 +397,14 @@ impl<'a> JackTokenizer<'a> {
     fn is_builtin_type(&self) -> bool {
         self.builtin_types.contains(&self.curr_token())
     }
+
+    fn is_builtin_op(&self) -> bool {
+        self.builtin_ops.contains(&self.curr_token())
+    }
+
+    fn is_builtin_unary_op(&self) -> bool {
+        self.builtin_unary_ops.contains(&self.curr_token())
+    }
 }
 
 
@@ -443,15 +445,15 @@ impl SymbolTable {
         self.SubrScope.retain(|k, _| k == "");
     }
 
-    fn var_count(&self, symbol_kind: &Kind) -> u16 {
+    fn var_count(&self, symbol_kind: Kind) -> u16 {
         let mut count_kind = 0;
         for (_, v) in self.SubrScope.iter() {
-            if &v.symbol_kind == symbol_kind {
+            if v.symbol_kind == symbol_kind {
                 count_kind += 1;
             }
         }
         for (_, v) in self.ClassScope.iter() {
-            if &v.symbol_kind == symbol_kind {
+            if v.symbol_kind == symbol_kind {
                 count_kind += 1;
             }
         }
@@ -459,11 +461,11 @@ impl SymbolTable {
     }
 
     fn define(&mut self, name: &str, symbol_type: &str, symbol_kind: Kind) {
-        if name == "".to_string() { panic!("Invalid name in symbol table"); }
+        if name == "" { panic!("Invalid name in symbol table"); }
         match symbol_kind {
             Kind::STATIC | Kind::FIELD => {
                 if !self.ClassScope.contains_key(name) {
-                    let id = self.var_count(&symbol_kind);
+                    let id = self.var_count(symbol_kind);
                     self.ClassScope.insert(name.to_string(),
                         Identifier {
                             name: name.to_string(),
@@ -475,7 +477,7 @@ impl SymbolTable {
             }
             Kind::ARGUMENT | Kind::VAR => {
                 if !self.SubrScope.contains_key(name) {
-                    let id = self.var_count(&symbol_kind);
+                    let id = self.var_count(symbol_kind);
                     self.SubrScope.insert(name.to_string(),
                         Identifier {
                             name: name.to_string(),
@@ -668,6 +670,7 @@ struct CompilationEngine<'a> {
     // - compile_if
     // - compile_expression
     // - compile_term
+    // - compile_subroutine_call
     // - compile_expression_list
     
     tokenizer: JackTokenizer<'a>,
@@ -721,7 +724,6 @@ impl<'a> CompilationEngine<'a> {
         // '}'
         assert_eq!(self.tokenizer.symbol(), "}");
         self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
-        self.tokenizer.advance();
 
         self.write_line("</class>");
     }
@@ -777,6 +779,7 @@ impl<'a> CompilationEngine<'a> {
 
             self.write_line("<subroutineDec>");
 
+            // ('constructor' | 'function' | 'method')
             self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
             self.tokenizer.advance();
 
@@ -934,6 +937,14 @@ impl<'a> CompilationEngine<'a> {
         self.write_line("<keyword> do </keyword>");
         self.tokenizer.advance();
 
+        // subroutineCall
+        self.compile_subroutine_call();
+
+        // ';'
+        assert_eq!(self.tokenizer.symbol(), ";");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
         self.write_line("</doStatement>");
     }
 
@@ -989,6 +1000,32 @@ impl<'a> CompilationEngine<'a> {
         self.write_line("<keyword> while </keyword>");
         self.tokenizer.advance();
 
+        // '('
+        assert_eq!(self.tokenizer.symbol(), "(");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // expression
+        self.compile_expression();
+
+        // ')'
+        assert_eq!(self.tokenizer.symbol(), ")");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // '{'
+        assert_eq!(self.tokenizer.symbol(), "{");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // statements
+        self.compile_statements();
+
+        // '}'
+        assert_eq!(self.tokenizer.symbol(), "}");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
         self.write_line("</whileStatement>");
     }
 
@@ -998,6 +1035,16 @@ impl<'a> CompilationEngine<'a> {
         // 'return'
         assert_eq!(self.tokenizer.keyword(), "return");
         self.write_line("<keyword> return </keyword>");
+        self.tokenizer.advance();
+
+        // expression?
+        if self.tokenizer.curr_token() != ";" {
+            self.compile_expression();
+        }
+
+        // ';'
+        assert_eq!(self.tokenizer.symbol(), ";");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         self.write_line("</returnStatement>");
@@ -1062,15 +1109,172 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_expression(&mut self) {
+        self.write_line("<expression>");
 
+        // term
+        self.compile_term();
+
+        // (op term)*
+        while self.tokenizer.is_builtin_op() {
+            // op
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // term
+            self.compile_term();
+        }
+
+        self.write_line("</expression>");
     }
 
     fn compile_term(&mut self) {
+        self.write_line("<term>");
 
+        match self.tokenizer.token_kind() {
+            TokenKind::INT_CONST => {
+                self.write_line(&format!("<integerConstant> {} </integerConstant>", self.tokenizer.int_val()));
+                self.tokenizer.advance();
+            },
+            TokenKind::STRING_CONST => {
+                self.write_line(&format!("<stringConstant> {} </stringConstant>", self.tokenizer.string_val()));
+                self.tokenizer.advance();
+            },
+            TokenKind::KEYWORD => {
+                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+                self.tokenizer.advance();
+            },
+            TokenKind::IDENTIFIER => {
+                match self.tokenizer.next_token() {
+                    "[" => { // varName '[' expression ']'
+                        // varName
+                        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                        self.tokenizer.advance();
+
+                        // '['
+                        assert_eq!(self.tokenizer.symbol(), "[");
+                        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                        self.tokenizer.advance();
+
+                        // expression
+                        self.compile_expression();
+
+                        // ']'
+                        assert_eq!(self.tokenizer.symbol(), "]");
+                        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                        self.tokenizer.advance();
+                    },
+                    "(" | "." => {
+                        self.compile_subroutine_call();
+                    },
+                    _ => { // varName
+                        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                        self.tokenizer.advance();
+                    }
+                }
+            },
+            TokenKind::SYMBOL => {
+                if self.tokenizer.symbol() == "(" {
+                    // '('
+                    assert_eq!(self.tokenizer.symbol(), "(");
+                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                    self.tokenizer.advance();
+
+                    // expression
+                    self.compile_expression();
+
+                    // ')'
+                    assert_eq!(self.tokenizer.symbol(), ")");
+                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                    self.tokenizer.advance();
+
+                } else if self.tokenizer.is_builtin_unary_op() {
+                    // unaryOp
+                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                    self.tokenizer.advance();
+
+                    // term
+                    self.compile_term();
+                } else {
+                    panic!("Invalid symbol in term");
+                }
+            },
+        }
+
+        self.write_line("</term>");
     }
 
     fn compile_expression_list(&mut self) {
+        self.write_line("<expressionList>");
 
+        if self.tokenizer.curr_token() != ")" {
+            // expression
+            self.compile_expression();
+
+            // (',' expression)*
+            while self.tokenizer.curr_token() == "," {
+                // ','
+                assert_eq!(self.tokenizer.symbol(), ",");
+                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                self.tokenizer.advance();
+
+                // expression
+                self.compile_expression();
+            }
+        }
+
+        self.write_line("</expressionList>");
+    }
+
+    fn compile_subroutine_call(&mut self) {
+        // subroutineName '(' expressionList ')'
+        if self.tokenizer.next_token() == "(" {
+            // subroutineName
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // '('
+            assert_eq!(self.tokenizer.symbol(), "(");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // expressionList
+            self.compile_expression_list();
+
+            // ')'
+            assert_eq!(self.tokenizer.symbol(), ")");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+        }
+        // (className | varName) '.' subroutineName '(' expressionList ')'
+        else if self.tokenizer.next_token() == "." { 
+            // (className | varName)
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // '.'
+            assert_eq!(self.tokenizer.symbol(), ".");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // subroutineName
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // '('
+            assert_eq!(self.tokenizer.symbol(), "(");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // expressionList
+            self.compile_expression_list();
+
+            // ')'
+            assert_eq!(self.tokenizer.symbol(), ")");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+        } else {
+            panic!("Invalid subroutine call");
+        }
     }
 }
 
