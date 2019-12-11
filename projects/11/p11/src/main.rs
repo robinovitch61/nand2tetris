@@ -839,29 +839,24 @@ impl<'a> CompilationEngine<'a> {
         while vec!["constructor", "function", "method"].contains(&self.tokenizer.curr_token()) {
             self.symbol_table.start_subroutine(); // clear subroutine scope
 
-            // self.write_line("<subroutineDec>");
-
             // ('constructor' | 'function' | 'method')
             let function_declared = self.tokenizer.curr_token() == "function";
-            // self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
             self.tokenizer.advance();
 
             // ('void' | type)
-            // if self.tokenizer.curr_token() == "void" {
+            if self.tokenizer.curr_token() == "void" {
                 // self.write_line("<keyword> void </keyword>");
-            // } else {
-                // self.write_nonvoid_type();
-            // }
+            } else {
+                self.write_nonvoid_type();
+            }
             self.tokenizer.advance();
 
             // subroutineName
             let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
-            // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // '('
             assert_eq!(self.tokenizer.symbol(), "(");
-            // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // parameterList
@@ -869,14 +864,10 @@ impl<'a> CompilationEngine<'a> {
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
-
-            self.write_line("<subroutineBody>");
 
             // '{'
             assert_eq!(self.tokenizer.symbol(), "{");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
             
             // varDec*
@@ -891,17 +882,11 @@ impl<'a> CompilationEngine<'a> {
 
             // '}'
             assert_eq!(self.tokenizer.symbol(), "}");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
-
-            self.write_line("</subroutineBody>");
-            self.write_line("</subroutineDec>");
         }
     }
 
     fn compile_parameterlist(&mut self) {
-        self.write_line("<parameterList>");
-
         if self.tokenizer.curr_token() != ")" {
             // type
             self.write_nonvoid_type();
@@ -933,8 +918,6 @@ impl<'a> CompilationEngine<'a> {
                 self.tokenizer.advance();
             }
         }
-
-        self.write_line("</parameterList>");
     }
 
     fn compile_var_dec(&mut self) {
@@ -943,7 +926,7 @@ impl<'a> CompilationEngine<'a> {
 
             // 'var'
             assert_eq!(self.tokenizer.keyword(), "var");
-            // self.write_line("<keyword> var </keyword>");
+            self.write_line("<keyword> var </keyword>");
             self.tokenizer.advance();
 
             // type
@@ -954,7 +937,7 @@ impl<'a> CompilationEngine<'a> {
             // varName
             let name = self.tokenizer.curr_token().to_string();
             self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-            // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // (',' varName)*
@@ -963,19 +946,19 @@ impl<'a> CompilationEngine<'a> {
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // varName
                 let name = self.tokenizer.curr_token().to_string();
                 self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-                // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                 self.tokenizer.advance();
             }
 
             // ';'
             assert_eq!(self.tokenizer.symbol(), ";");
-            // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             self.write_line("</varDec>");
@@ -985,8 +968,6 @@ impl<'a> CompilationEngine<'a> {
     fn compile_statements(&mut self) {
         while self.tokenizer.is_keyword() 
         && vec!["let", "if", "while", "do", "return"].contains(&self.tokenizer.keyword()) {
-            self.write_line("<statements>");
-            
             match self.tokenizer.keyword() {
                 "do" => self.compile_do(),
                 "let" => self.compile_let(),
@@ -995,15 +976,12 @@ impl<'a> CompilationEngine<'a> {
                 "if" => self.compile_if(),
                 _ => panic!("Invalid keyword in statement")
             }
-
-            self.write_line("</statements>");
         }
     }
 
     fn compile_do(&mut self) {
         // 'do'
         assert_eq!(self.tokenizer.keyword(), "do");
-        self.write_line("<keyword> do </keyword>");
         self.tokenizer.advance();
 
         // subroutineCall
@@ -1011,7 +989,6 @@ impl<'a> CompilationEngine<'a> {
 
         // ';'
         assert_eq!(self.tokenizer.symbol(), ";");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // get rid of return value
@@ -1185,7 +1162,6 @@ impl<'a> CompilationEngine<'a> {
         while self.tokenizer.is_builtin_op() {
             // op
             let math_command = self.tokenizer.math_command();
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // term
@@ -1196,8 +1172,6 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_term(&mut self) {
-        self.write_line("<term>");
-
         match self.tokenizer.token_kind() {
             TokenKind::INT_CONST => {
                 self.vm_writer.write_push(Segment::CONST, self.tokenizer.int_val());
@@ -1248,7 +1222,6 @@ impl<'a> CompilationEngine<'a> {
                 if self.tokenizer.symbol() == "(" {
                     // '('
                     assert_eq!(self.tokenizer.symbol(), "(");
-                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                     self.tokenizer.advance();
 
                     // expression
@@ -1256,7 +1229,6 @@ impl<'a> CompilationEngine<'a> {
 
                     // ')'
                     assert_eq!(self.tokenizer.symbol(), ")");
-                    self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                     self.tokenizer.advance();
 
                 } else if self.tokenizer.is_builtin_unary_op() {
@@ -1273,14 +1245,10 @@ impl<'a> CompilationEngine<'a> {
                 }
             },
         }
-
-        // self.vm_writer.write_call("add or Math.multiply etc.", n_args);
-        self.write_line("</term>");
     }
 
     fn compile_expression_list(&mut self) {
         self.num_args = 0;
-        self.write_line("<expressionList>");
 
         if self.tokenizer.curr_token() != ")" {
             self.num_args += 1;
@@ -1294,16 +1262,12 @@ impl<'a> CompilationEngine<'a> {
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // expression
                 self.compile_expression();
             }
         }
-
-        // self.vm_writer.write_call("add or Math.multiply etc.", n_args); // GET NARGS HERE
-        self.write_line(&format!("<nargs: {} /expressionList>", self.num_args));
     }
 
     fn compile_subroutine_call(&mut self) {
@@ -1311,12 +1275,10 @@ impl<'a> CompilationEngine<'a> {
         if self.tokenizer.next_token() == "(" {
             // subroutineName
             let subroutine_name = self.tokenizer.curr_token().to_string();
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // '('
             assert_eq!(self.tokenizer.symbol(), "(");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // expressionList
@@ -1324,7 +1286,6 @@ impl<'a> CompilationEngine<'a> {
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             self.vm_writer.write_call(&subroutine_name, self.num_args);
@@ -1333,21 +1294,17 @@ impl<'a> CompilationEngine<'a> {
         else if self.tokenizer.next_token() == "." { 
             // (className | varName)
             let subroutine_name = self.tokenizer.extract_dot_subroutine();
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // '.'
             assert_eq!(self.tokenizer.symbol(), ".");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // subroutineName
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // '('
             assert_eq!(self.tokenizer.symbol(), "(");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // expressionList
@@ -1355,7 +1312,6 @@ impl<'a> CompilationEngine<'a> {
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             self.vm_writer.write_call(&subroutine_name, self.num_args);
