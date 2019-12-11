@@ -459,7 +459,6 @@ enum Kind {
 
 #[derive(Debug)]
 struct Identifier<> {
-    name: String,
     symbol_type: String,
     symbol_kind: Kind,
     id: u32,
@@ -507,7 +506,6 @@ impl SymbolTable {
                     let id = self.var_count(symbol_kind);
                     self.ClassScope.insert(name.to_string(),
                         Identifier {
-                            name: name.to_string(),
                             symbol_type: symbol_type.to_string(),
                             symbol_kind,
                             id 
@@ -519,7 +517,6 @@ impl SymbolTable {
                     let id = self.var_count(symbol_kind);
                     self.SubrScope.insert(name.to_string(),
                         Identifier {
-                            name: name.to_string(),
                             symbol_type: symbol_type.to_string(),
                             symbol_kind,
                             id 
@@ -736,6 +733,7 @@ struct CompilationEngine<'a> {
     vm_writer: VmWriter<'a>,
     output_file: &'a fs::File, // remove later
     class_name: String,
+    label_count: u32,
 }
 
 impl<'a> CompilationEngine<'a> {
@@ -747,12 +745,12 @@ impl<'a> CompilationEngine<'a> {
 
     fn write_nonvoid_type(&mut self) {
         if self.tokenizer.is_builtin_type() || self.tokenizer.is_identifier() {
-            // slightly redundant on purpose here as vm code in this block should be the same
-            if self.tokenizer.is_builtin_type() {
-                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
-            } else {
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
-            }
+            // // slightly redundant on purpose here as vm code in this block should be the same
+            // if self.tokenizer.is_builtin_type() {
+            //     self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
+            // } else {
+            //     self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
+            // }
         } else {
             panic!("Invalid type in subroutine declaration");
         }
@@ -873,6 +871,7 @@ impl<'a> CompilationEngine<'a> {
             let num_locals = self.compile_var_dec();
 
             if function_declared {
+                // vm function subroutineName num_locals
                 self.vm_writer.write_function(&function_name, num_locals)
             }
 
@@ -895,14 +894,12 @@ impl<'a> CompilationEngine<'a> {
             // varName
             let name = self.tokenizer.curr_token().to_string();
             self.symbol_table.define(&name, &symbol_type, Kind::ARGUMENT);
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // (',' type varName)*
             while self.tokenizer.curr_token() == "," {
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // type
@@ -913,7 +910,6 @@ impl<'a> CompilationEngine<'a> {
                 // varName
                 let name = self.tokenizer.curr_token().to_string();
                 self.symbol_table.define(&name, &symbol_type, Kind::ARGUMENT);
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                 self.tokenizer.advance();
             }
         }
@@ -927,7 +923,6 @@ impl<'a> CompilationEngine<'a> {
 
             // 'var'
             assert_eq!(self.tokenizer.keyword(), "var");
-            self.write_line("<keyword> var </keyword>");
             self.tokenizer.advance();
 
             // type
@@ -938,7 +933,6 @@ impl<'a> CompilationEngine<'a> {
             // varName
             let name = self.tokenizer.curr_token().to_string();
             self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // (',' varName)*
@@ -947,22 +941,17 @@ impl<'a> CompilationEngine<'a> {
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // varName
                 let name = self.tokenizer.curr_token().to_string();
                 self.symbol_table.define(&name, &symbol_type, Kind::VAR);
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                 self.tokenizer.advance();
             }
 
             // ';'
             assert_eq!(self.tokenizer.symbol(), ";");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
-
-            self.write_line("</varDec>");
         }
         num_locals
     }
@@ -998,22 +987,20 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_let(&mut self) {
-        self.write_line("<letStatement>");
-
         // 'let'
         assert_eq!(self.tokenizer.keyword(), "let");
-        self.write_line("<keyword> let </keyword>");
         self.tokenizer.advance();
 
         // varName
-        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+        let kind = self.symbol_table.kind_of(self.tokenizer.curr_token());
+        let index = self.symbol_table.index_of(self.tokenizer.curr_token());
+        let segment = self.tokenizer.kind_to_segment(kind);
         self.tokenizer.advance();
 
         // ('[' expression ']')?
         if self.tokenizer.curr_token() == "[" {
             // '['
             assert_eq!(self.tokenizer.symbol(), "[");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // expression
@@ -1021,50 +1008,57 @@ impl<'a> CompilationEngine<'a> {
 
             // ']'
             assert_eq!(self.tokenizer.symbol(), "]");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
         }
 
         // '='
         assert_eq!(self.tokenizer.symbol(), "=");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // expression
         self.compile_expression();
+
+        // vn pop segment index
+        self.vm_writer.write_pop(segment, index);
 
         // ';'
         assert_eq!(self.tokenizer.symbol(), ";");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
-
-        self.write_line("</letStatement>");
     }
 
     fn compile_while(&mut self) {
-        self.write_line("<whileStatement>");
-
         // 'while'
         assert_eq!(self.tokenizer.keyword(), "while");
-        self.write_line("<keyword> while </keyword>");
         self.tokenizer.advance();
+
+        // setup labels
+        let first_label = format!("L{}", self.label_count);
+        self.label_count += 1;
+        let second_label = format!("L{}", self.label_count);
+        self.label_count += 1;
 
         // '('
         assert_eq!(self.tokenizer.symbol(), "(");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
+
+        // vm first label
+        self.vm_writer.write_label(&first_label);
 
         // expression
         self.compile_expression();
 
+        // vm not
+        self.vm_writer.write_unary_arithmetic(UnaryMathCommand::NOT);
+
+        // vm if-goto second label
+        self.vm_writer.write_if_goto(&second_label);
+
         // ')'
         assert_eq!(self.tokenizer.symbol(), ")");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // '{'
         assert_eq!(self.tokenizer.symbol(), "{");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // statements
@@ -1072,10 +1066,13 @@ impl<'a> CompilationEngine<'a> {
 
         // '}'
         assert_eq!(self.tokenizer.symbol(), "}");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
-        self.write_line("</whileStatement>");
+        // vm goto first label
+        self.vm_writer.write_goto(&first_label);
+
+        // vm second label
+        self.vm_writer.write_label(&second_label);
     }
 
     fn compile_return(&mut self) {
@@ -1095,33 +1092,40 @@ impl<'a> CompilationEngine<'a> {
         assert_eq!(self.tokenizer.symbol(), ";");
         self.tokenizer.advance();
 
+        // vm return
         self.vm_writer.write_return();
     }
 
     fn compile_if(&mut self) {
-        self.write_line("<ifStatement>");
-
         // 'if'
         assert_eq!(self.tokenizer.keyword(), "if");
-        self.write_line("<keyword> if </keyword>");
         self.tokenizer.advance();
+
+        // setup labels
+        let first_label = format!("L{}", self.label_count);
+        self.label_count += 1;
+        let second_label = format!("L{}", self.label_count);
+        self.label_count += 1;
 
         // '('
         assert_eq!(self.tokenizer.symbol(), "(");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // expression
         self.compile_expression();
 
+        // vm not
+        self.vm_writer.write_unary_arithmetic(UnaryMathCommand::NOT);
+
         // ')'
         assert_eq!(self.tokenizer.symbol(), ")");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
+
+        // vm if-goto first label
+        self.vm_writer.write_if_goto(&first_label);
 
         // '{'
         assert_eq!(self.tokenizer.symbol(), "{");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // statements
@@ -1129,19 +1133,22 @@ impl<'a> CompilationEngine<'a> {
 
         // '}'
         assert_eq!(self.tokenizer.symbol(), "}");
-        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
+
+        // vm goto second label
+        self.vm_writer.write_goto(&second_label);
+        
+        // vm first label
+        self.vm_writer.write_label(&first_label);
 
         // ('else' '{' statements '}')?
         if self.tokenizer.curr_token() == "else" {
             // 'else'
             assert_eq!(self.tokenizer.keyword(), "else");
-            self.write_line("<keyword> else </keyword>");
             self.tokenizer.advance();
             
             // '{'
             assert_eq!(self.tokenizer.symbol(), "{");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // statements
@@ -1149,11 +1156,11 @@ impl<'a> CompilationEngine<'a> {
 
             // '}'
             assert_eq!(self.tokenizer.symbol(), "}");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
         }
 
-        self.write_line("</ifStatement>");
+        // vm second label
+        self.vm_writer.write_label(&second_label);
     }
 
     fn compile_expression(&mut self) {
@@ -1169,6 +1176,7 @@ impl<'a> CompilationEngine<'a> {
             // term
             self.compile_term();
 
+            // vm op math command
             self.vm_writer.write_arithmetic(math_command);
         }
     }
@@ -1176,6 +1184,7 @@ impl<'a> CompilationEngine<'a> {
     fn compile_term(&mut self) {
         match self.tokenizer.token_kind() {
             TokenKind::INT_CONST => {
+                // vm push constant
                 self.vm_writer.write_push(Segment::CONST, self.tokenizer.int_val());
                 self.tokenizer.advance();
             },
@@ -1184,7 +1193,25 @@ impl<'a> CompilationEngine<'a> {
                 self.tokenizer.advance();
             },
             TokenKind::KEYWORD => {
-                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+                match self.tokenizer.keyword() {
+                    "true" => {
+                        // vm push -1
+                        self.vm_writer.write_push(Segment::CONST, 1);
+                        self.vm_writer.write_unary_arithmetic(UnaryMathCommand::NEG);
+                    },
+                    "false" => {
+                        // vm push 0
+                        self.vm_writer.write_push(Segment::CONST, 0);
+                    },
+                    "null" => {
+                        // vm push 0
+                        self.vm_writer.write_push(Segment::CONST, 0);
+                    },
+                    _ => {
+                        self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+                        panic!("Unhandled keyword!");
+                    }
+                }
                 self.tokenizer.advance();
             },
             TokenKind::IDENTIFIER => {
@@ -1210,12 +1237,11 @@ impl<'a> CompilationEngine<'a> {
                     "(" | "." => {
                         self.compile_subroutine_call();
                     },
-                    _ => { // varName
+                    _ => { // varName - vm push segment index
                         let kind = self.symbol_table.kind_of(self.tokenizer.curr_token());
                         let index = self.symbol_table.index_of(self.tokenizer.curr_token());
                         let segment = self.tokenizer.kind_to_segment(kind);
                         self.vm_writer.write_push(segment, index);
-                        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                         self.tokenizer.advance();
                     }
                 }
@@ -1241,6 +1267,7 @@ impl<'a> CompilationEngine<'a> {
                     // term
                     self.compile_term();
 
+                    // vm unary math command
                     self.vm_writer.write_unary_arithmetic(unary_math_command);
                 } else {
                     panic!("Invalid symbol in term");
@@ -1291,6 +1318,7 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
 
+            // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
         }
         // (className | varName) '.' subroutineName '(' expressionList ')'
@@ -1317,6 +1345,7 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
 
+            // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
         } else {
             panic!("Invalid subroutine call");
@@ -1331,6 +1360,7 @@ impl<'a> CompilationEngine<'a> {
 fn main() {
     let file_parser = FileParser::from_user_args("jack", "vm");
     let input_paths = file_parser.get_filepaths();
+    let mut label_count = 0;
     for input_path in &input_paths {
         // path stuff
         let output_path = &file_parser.get_output_filepath(input_path);
@@ -1360,7 +1390,9 @@ fn main() {
             vm_writer,
             output_file, // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
             class_name: "".to_string(),
+            label_count,
         };
         compiler.compile_class();
+        label_count = compiler.label_count;
     }
 }

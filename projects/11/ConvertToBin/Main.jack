@@ -18,6 +18,12 @@
  * 6) Check that RAM[8001]..RAM[8016] contains the correct binary result, and
  *    that none of these memory locations contains -1.
  */
+
+ // to do:
+ // - let statements
+ // - true, false, null
+ // - while statements
+ // - if statements
 class Main {
     
     /**
@@ -65,7 +71,7 @@ class Main {
     	    return 1;
     	}
     	else {
-	    return mask * 2;
+	        return mask * 2;
     	}
     }
     
