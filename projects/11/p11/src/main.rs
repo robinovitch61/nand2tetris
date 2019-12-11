@@ -473,7 +473,7 @@ struct SymbolTable<> {
     // - kind_of (args: name) -- returns kind of var
     // - type_of (args: name) -- returns type of var X
     // - index_of (args: name) -- returns index of var X
-    //// - contains (args: name) -- returns bool
+    // - contains (args: name) -- returns bool
     SubrScope: HashMap<String, Identifier>,
     ClassScope: HashMap<String, Identifier>,
 }
@@ -556,9 +556,9 @@ impl SymbolTable {
         }
     }
 
-    // fn contains(&self, name: &str) -> bool {
-    //     self.SubrScope.contains_key(name) || self.ClassScope.contains_key(name)
-    // }
+    fn contains(&self, name: &str) -> bool {
+        self.SubrScope.contains_key(name) || self.ClassScope.contains_key(name)
+    }
 }
 
 
@@ -789,14 +789,11 @@ impl<'a> CompilationEngine<'a> {
 
     fn compile_class_var_dec(&mut self) {
         while vec!["static", "field"].contains(&self.tokenizer.curr_token()) {
-            self.write_line("<classVarDec>");
-
             // ('static' | 'field')
             let mut var_kind = Kind::FIELD;
             if self.tokenizer.keyword() == "static" {
                 var_kind = Kind::STATIC
             }
-            self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
             self.tokenizer.advance();
 
             // type
@@ -807,28 +804,22 @@ impl<'a> CompilationEngine<'a> {
             // varName
             let name = self.tokenizer.curr_token().to_string();
             self.symbol_table.define(&name, &symbol_type, var_kind);
-            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
             self.tokenizer.advance();
 
             // (',' varName)*
             while self.tokenizer.curr_token() == "," {
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
-                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                 self.tokenizer.advance();
 
                 // varName
                 let name = self.tokenizer.curr_token().to_string();
                 self.symbol_table.define(&name, &symbol_type, var_kind);
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
                 self.tokenizer.advance();
             }
             // ';'
             assert_eq!(self.tokenizer.symbol(), ";");
-            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
-
-            self.write_line("</classVarDec>");
         }
     }
 
@@ -837,97 +828,72 @@ impl<'a> CompilationEngine<'a> {
             self.symbol_table.start_subroutine(); // clear subroutine scope
 
             // ('constructor' | 'function' | 'method')
-            let subroutine_kind = self.tokenizer.curr_token();
+            let subroutine_kind = self.tokenizer.curr_token().to_string();
             self.tokenizer.advance();
 
-            match subroutine_kind {
-                "function" {
-                    // ('void' | type)
-                    if self.tokenizer.curr_token() == "void" {
-                    } else {
-                        self.write_nonvoid_type();
-                    }
-                    self.tokenizer.advance();
-
-                    // subroutineName (for 'function')
-                    let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
-                    self.tokenizer.advance();
-
-                    // '('
-                    assert_eq!(self.tokenizer.symbol(), "(");
-                    self.tokenizer.advance();
-
-                    // parameterList
-                    self.compile_parameterlist();
-
-                    // ')'
-                    assert_eq!(self.tokenizer.symbol(), ")");
-                    self.tokenizer.advance();
-
-                    // '{'
-                    assert_eq!(self.tokenizer.symbol(), "{");
-                    self.tokenizer.advance();
-                    
-                    // varDec*
-                    let num_locals = self.compile_var_dec();
-
-                    // vm function subroutineName num_locals (for 'function')
-                    self.vm_writer.write_function(&function_name, num_locals)
-
-                    // statements
-                    self.compile_statements();
-
-                    // '}'
-                    assert_eq!(self.tokenizer.symbol(), "}");
-                    self.tokenizer.advance();
-                },
-                "constructor" {
-                    // get number of fields in class
-                    let num_fields = self.symbol_table.var_count(Kind::FIELD)
-
-                    // ('void' | type)
-                    if self.tokenizer.curr_token() == "void" {
-                    } else {
-                        self.write_nonvoid_type();
-                    }
-                    self.tokenizer.advance();
-
-                    // subroutineName (for 'function')
-                    let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
-                    self.tokenizer.advance();
-
-                    // '('
-                    assert_eq!(self.tokenizer.symbol(), "(");
-                    self.tokenizer.advance();
-
-                    // parameterList
-                    self.compile_parameterlist();
-
-                    // ')'
-                    assert_eq!(self.tokenizer.symbol(), ")");
-                    self.tokenizer.advance();
-
-                    // '{'
-                    assert_eq!(self.tokenizer.symbol(), "{");
-                    self.tokenizer.advance();
-                    
-                    // varDec*
-                    let num_locals = self.compile_var_dec();
-
-                    // vm function subroutineName num_locals (for 'function')
-                    self.vm_writer.write_function(&function_name, num_locals)
-
-                    // statements
-                    self.compile_statements();
-
-                    // '}'
-                    assert_eq!(self.tokenizer.symbol(), "}");
-                    self.tokenizer.advance();
-                },
-                "method" {
-
-                }
+            // ('void' | type)
+            if self.tokenizer.curr_token() == "void" {
+            } else {
+                self.write_nonvoid_type();
             }
+            self.tokenizer.advance();
+
+            // subroutineName
+            let function_name = format!(
+                "{}.{}",
+                self.class_name,
+                self.tokenizer.curr_token().to_string()
+            );
+            self.tokenizer.advance();
+
+            // '('
+            assert_eq!(self.tokenizer.symbol(), "(");
+            self.tokenizer.advance();
+
+            // parameterList
+            self.compile_parameterlist();
+
+            // ')'
+            assert_eq!(self.tokenizer.symbol(), ")");
+            self.tokenizer.advance();
+
+            // '{'
+            assert_eq!(self.tokenizer.symbol(), "{");
+            self.tokenizer.advance();
+            
+            // varDec*
+            let num_locals = self.compile_var_dec();
+
+            // vm function subroutineName num_locals
+            self.vm_writer.write_function(&function_name, num_locals);
+
+            if subroutine_kind == "constructor" {
+                // get number of fields in class
+                let num_fields = self.symbol_table.var_count(Kind::FIELD);
+                
+                // vm push constant num_fields
+                self.vm_writer.write_push(Segment::CONST, num_fields);
+
+                // vm call Memory.alloc 1
+                self.vm_writer.write_call("Memory.alloc", 1);
+
+                // vm pop pointer 0 (anchor this at base addr)
+                self.vm_writer.write_pop(Segment::POINTER, 0);
+            } else if subroutine_kind == "method" {
+                // add current class object 'this' to symbol table (for 'method')
+                self.symbol_table.define("this", &self.class_name, Kind::ARGUMENT);
+
+                // vm push argument 0, then pop pointer 0 (anchor this at base addr)
+                self.vm_writer.write_push(Segment::ARG, 0);
+                self.vm_writer.write_pop(Segment::POINTER, 0);
+            }
+
+            // statements
+            self.compile_statements();
+
+            // '}'
+            assert_eq!(self.tokenizer.symbol(), "}");
+            self.tokenizer.advance();
         }
     }
 
@@ -1354,20 +1320,24 @@ impl<'a> CompilationEngine<'a> {
     fn compile_subroutine_call(&mut self) {
         // subroutineName '(' expressionList ')'
         if self.tokenizer.next_token() == "(" {
-            // subroutineName
-            let subroutine_name = self.tokenizer.curr_token().to_string();
+            // subroutineName -- this will be a method of the current class
+            let object_name = self.tokenizer.curr_token().to_string();
+            let subroutine_name = format!("{}.{}", self.class_name, object_name);
             self.tokenizer.advance();
 
             // '('
             assert_eq!(self.tokenizer.symbol(), "(");
             self.tokenizer.advance();
 
-            // expressionList
-            let num_args = self.compile_expression_list();
+            // expressionList (add 1 arg for this)
+            let num_args = self.compile_expression_list() + 1;
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
+
+            // vm push pointer 0
+            self.vm_writer.write_push(Segment::POINTER, 0);
 
             // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
@@ -1375,7 +1345,8 @@ impl<'a> CompilationEngine<'a> {
         // (className | varName) '.' subroutineName '(' expressionList ')'
         else if self.tokenizer.next_token() == "." { 
             // (className | varName)
-            let subroutine_name = self.tokenizer.extract_dot_subroutine();
+            let object_name = self.tokenizer.curr_token().to_string();
+            let mut subroutine_name = self.tokenizer.extract_dot_subroutine();
             self.tokenizer.advance();
 
             // '.'
@@ -1390,11 +1361,26 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // expressionList
-            let num_args = self.compile_expression_list();
+            let mut num_args = self.compile_expression_list();
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
+
+            // check if method call from some object in scope
+            // otherwise can assume .new() call or referencing OS
+            if self.symbol_table.contains(&object_name) {
+                num_args += 1;
+                subroutine_name = subroutine_name.replace(
+                    &object_name,
+                    &self.symbol_table.type_of(&object_name)
+                );
+                // vm push object on stack as first arg
+                let kind = self.symbol_table.kind_of(&object_name);
+                let index = self.symbol_table.index_of(&object_name);
+                let segment = self.tokenizer.kind_to_segment(kind);
+                self.vm_writer.write_push(segment, index);
+            }
 
             // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
