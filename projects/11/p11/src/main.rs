@@ -3,7 +3,7 @@
 
 
 /* TODO:
-- [] Refactor to use actual modules
+- [X] Refactor to use actual modules
 - [] Get subroutine names with dots, e.g. 'a.b()'
 - [] Implement expression VM code using provided algorithm
 - [] Implement if and while loop VM code using provided VM code
@@ -277,6 +277,8 @@ struct JackTokenizer<'a> {
     // - is_builtin_type
     // - is_builtin_op
     // - is_builtin_unary_op
+    // - math_command -- returns the MathCommand of a given op
+    // - unary_math_command -- returns the UnaryMathCommand of a given op
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
@@ -379,9 +381,9 @@ impl<'a> JackTokenizer<'a> {
         self.token_kind() == TokenKind::INT_CONST
     }
 
-    fn int_val(&self) -> &str {
+    fn int_val(&self) -> u32 {
         assert!(self.is_int_val());
-        self.curr_token()
+        self.curr_token().parse::<u32>().unwrap()
     }
 
     fn is_string_val(&self) -> bool {
@@ -404,6 +406,28 @@ impl<'a> JackTokenizer<'a> {
 
     fn is_builtin_unary_op(&self) -> bool {
         self.builtin_unary_ops.contains(&self.curr_token())
+    }
+
+    fn math_command(&self) -> MathCommand {
+        match self.curr_token() {
+            "+" => MathCommand::ADD,
+            "-" => MathCommand::SUB,
+            "=" => MathCommand::EQUAL,
+            ">" => MathCommand::GT,
+            "<" => MathCommand::LT,
+            "&" => MathCommand::AND,
+            "|" => MathCommand::OR,
+            "*" => MathCommand::MULT,
+            _ => panic!("Invalid symbol for math command")
+        }
+    }
+
+    fn unary_math_command(&self) -> UnaryMathCommand {
+        match self.curr_token() {
+            "-" => UnaryMathCommand::NEG,
+            "~" => UnaryMathCommand::NOT,
+            _ => panic!("Invalid symbol for unary math command")
+        }
     }
 }
 
@@ -541,31 +565,38 @@ enum Segment {
 enum MathCommand {
     ADD,
     SUB,
-    NEG,
-    Equal,
+    // NEG,
+    EQUAL,
     GT,
     LT,
     AND,
     OR,
+    // NOT,
+    MULT,
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+enum UnaryMathCommand {
+    NEG,
     NOT,
 }
 
 #[derive(Debug)]
-struct VmWriter<> {
+struct VmWriter<'a> {
     // fns:
-    // - write_push (args: segment, index) X
-    // - write_pop (args: segment, index) X
-    // - write_arithmetic (args: MathCommand) X
-    // - write_label (args: label) X
-    // - write_goto (args: label) X
-    // - write_if_goto (args: label) X
-    // - write_call (args: name, n_args) X
-    // - write_function (args: name, n_locals) X
-    // - write_return X
-    OutputFile: fs::File,
+    // - write_push (args: segment, index)
+    // - write_pop (args: segment, index)
+    // - write_arithmetic (args: MathCommand)
+    // - write_label (args: label)
+    // - write_goto (args: label)
+    // - write_if_goto (args: label)
+    // - write_call (args: name, n_args)
+    // - write_function (args: name, n_locals)
+    // - write_return
+    output_file: &'a fs::File,
 }
 
-impl VmWriter {
+impl<'a> VmWriter<'a> {
     fn write_push(&mut self, segment: Segment, index: u32) {
         let line = match segment {
             Segment::CONST => { format!("push constant {}",  index.to_string()) },
@@ -577,7 +608,7 @@ impl VmWriter {
             Segment::POINTER => { format!("push pointer {}",  index.to_string()) },
             Segment::TEMP => { format!("push temp {}",  index.to_string()) },
         };
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
@@ -592,7 +623,7 @@ impl VmWriter {
             Segment::POINTER => { format!("pop pointer {}",  index.to_string()) },
             Segment::TEMP => { format!("pop temp {}",  index.to_string()) },
         };
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
@@ -600,50 +631,58 @@ impl VmWriter {
         let line = match command {
             MathCommand::ADD => { "add" },
             MathCommand::SUB => { "sub" },
-            MathCommand::NEG => { "neg" },
-            MathCommand::Equal => { "eq" },
+            MathCommand::EQUAL => { "eq" },
             MathCommand::GT => { "gt" },
             MathCommand::LT => { "lt" },
             MathCommand::AND => { "and" },
             MathCommand::OR => { "or" },
-            MathCommand::NOT => { "not" },
+            MathCommand::MULT => { "call Math.multiply 2" },
         };
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
+            .expect("Failed to write line to file");
+    }
+
+    fn write_unary_arithmetic(&mut self, command: UnaryMathCommand) {
+        let line = match command {
+            UnaryMathCommand::NEG => { "neg" },
+            UnaryMathCommand::NOT => { "not" },
+        };
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_label(&mut self, label: &str) {
         let line = format!("label {}", label);
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_goto(&mut self, label: &str) {
         let line = format!("goto {}", label);
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_if_goto(&mut self, label: &str) {
         let line = format!("if-goto {}", label);
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_call(&mut self, name: &str, n_args: u8) {
         let line = format!("call {} {}", name, n_args.to_string());
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_function(&mut self, name: &str, n_locals: u8) {
         let line = format!("function {} {}", name, n_locals.to_string());
-        self.OutputFile.write_all(format!("{}\n", line).as_bytes())
+        self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
     }
 
     fn write_return(&mut self) {
-        self.OutputFile.write_all("return\n".as_bytes())
+        self.output_file.write_all("return\n".as_bytes())
             .expect("Failed to write line to file");
     }
 }
@@ -675,7 +714,8 @@ struct CompilationEngine<'a> {
     
     tokenizer: JackTokenizer<'a>,
     symbol_table: SymbolTable,
-    output_file: fs::File,
+    vm_writer: VmWriter<'a>,
+    output_file: &'a fs::File,
 }
 
 impl<'a> CompilationEngine<'a> {
@@ -1109,22 +1149,21 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_expression(&mut self) {
-        self.write_line("<expression>");
-
         // term
         self.compile_term();
 
         // (op term)*
         while self.tokenizer.is_builtin_op() {
             // op
+            let math_command = self.tokenizer.math_command();
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
             // term
             self.compile_term();
-        }
 
-        self.write_line("</expression>");
+            self.vm_writer.write_arithmetic(math_command);
+        }
     }
 
     fn compile_term(&mut self) {
@@ -1132,7 +1171,7 @@ impl<'a> CompilationEngine<'a> {
 
         match self.tokenizer.token_kind() {
             TokenKind::INT_CONST => {
-                self.write_line(&format!("<integerConstant> {} </integerConstant>", self.tokenizer.int_val()));
+                self.vm_writer.write_push(Segment::CONST, self.tokenizer.int_val());
                 self.tokenizer.advance();
             },
             TokenKind::STRING_CONST => {
@@ -1200,18 +1239,24 @@ impl<'a> CompilationEngine<'a> {
             },
         }
 
+        // self.vm_writer.write_call("add or Math.multiply etc.", n_args);
         self.write_line("</term>");
     }
 
     fn compile_expression_list(&mut self) {
+        let mut n_args = 0;
         self.write_line("<expressionList>");
 
         if self.tokenizer.curr_token() != ")" {
+            n_args += 1;
+
             // expression
             self.compile_expression();
 
             // (',' expression)*
             while self.tokenizer.curr_token() == "," {
+                n_args += 1;
+
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
                 self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
@@ -1222,7 +1267,8 @@ impl<'a> CompilationEngine<'a> {
             }
         }
 
-        self.write_line("</expressionList>");
+        // self.vm_writer.write_call("add or Math.multiply etc.", n_args); // GET NARGS HERE
+        self.write_line(&format!("<nargs: {} /expressionList>", n_args));
     }
 
     fn compile_subroutine_call(&mut self) {
@@ -1293,8 +1339,9 @@ fn main() {
         println!("Compiling {} to {}", input_path_string, output_path_string);
 
         // file i/o
-        let output_file = file_parser.get_writeable_file(output_path);
+        let output_file = &file_parser.get_writeable_file(output_path);
         let file_contents = file_parser.get_file_contents(input_path);
+        let vm_writer = VmWriter{ output_file };
 
         // tokenize
         let tokens = file_parser.tokenize_for_jack(file_contents);
@@ -1307,8 +1354,8 @@ fn main() {
         };
 
         // create compilation engine and compile
-        let mut compiler = CompilationEngine{
-            tokenizer, symbol_table, output_file
+        let mut compiler = CompilationEngine{ // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
+            tokenizer, symbol_table, vm_writer, output_file
         };
         compiler.compile_class();
     }
