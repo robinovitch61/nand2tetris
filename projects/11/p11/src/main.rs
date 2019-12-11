@@ -837,50 +837,97 @@ impl<'a> CompilationEngine<'a> {
             self.symbol_table.start_subroutine(); // clear subroutine scope
 
             // ('constructor' | 'function' | 'method')
-            let function_declared = self.tokenizer.curr_token() == "function";
+            let subroutine_kind = self.tokenizer.curr_token();
             self.tokenizer.advance();
 
-            // ('void' | type)
-            if self.tokenizer.curr_token() == "void" {
-                // self.write_line("<keyword> void </keyword>");
-            } else {
-                self.write_nonvoid_type();
+            match subroutine_kind {
+                "function" {
+                    // ('void' | type)
+                    if self.tokenizer.curr_token() == "void" {
+                    } else {
+                        self.write_nonvoid_type();
+                    }
+                    self.tokenizer.advance();
+
+                    // subroutineName (for 'function')
+                    let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
+                    self.tokenizer.advance();
+
+                    // '('
+                    assert_eq!(self.tokenizer.symbol(), "(");
+                    self.tokenizer.advance();
+
+                    // parameterList
+                    self.compile_parameterlist();
+
+                    // ')'
+                    assert_eq!(self.tokenizer.symbol(), ")");
+                    self.tokenizer.advance();
+
+                    // '{'
+                    assert_eq!(self.tokenizer.symbol(), "{");
+                    self.tokenizer.advance();
+                    
+                    // varDec*
+                    let num_locals = self.compile_var_dec();
+
+                    // vm function subroutineName num_locals (for 'function')
+                    self.vm_writer.write_function(&function_name, num_locals)
+
+                    // statements
+                    self.compile_statements();
+
+                    // '}'
+                    assert_eq!(self.tokenizer.symbol(), "}");
+                    self.tokenizer.advance();
+                },
+                "constructor" {
+                    // get number of fields in class
+                    let num_fields = self.symbol_table.var_count(Kind::FIELD)
+
+                    // ('void' | type)
+                    if self.tokenizer.curr_token() == "void" {
+                    } else {
+                        self.write_nonvoid_type();
+                    }
+                    self.tokenizer.advance();
+
+                    // subroutineName (for 'function')
+                    let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
+                    self.tokenizer.advance();
+
+                    // '('
+                    assert_eq!(self.tokenizer.symbol(), "(");
+                    self.tokenizer.advance();
+
+                    // parameterList
+                    self.compile_parameterlist();
+
+                    // ')'
+                    assert_eq!(self.tokenizer.symbol(), ")");
+                    self.tokenizer.advance();
+
+                    // '{'
+                    assert_eq!(self.tokenizer.symbol(), "{");
+                    self.tokenizer.advance();
+                    
+                    // varDec*
+                    let num_locals = self.compile_var_dec();
+
+                    // vm function subroutineName num_locals (for 'function')
+                    self.vm_writer.write_function(&function_name, num_locals)
+
+                    // statements
+                    self.compile_statements();
+
+                    // '}'
+                    assert_eq!(self.tokenizer.symbol(), "}");
+                    self.tokenizer.advance();
+                },
+                "method" {
+
+                }
             }
-            self.tokenizer.advance();
-
-            // subroutineName
-            let function_name = format!("{}.{}", self.class_name, self.tokenizer.curr_token().to_string());
-            self.tokenizer.advance();
-
-            // '('
-            assert_eq!(self.tokenizer.symbol(), "(");
-            self.tokenizer.advance();
-
-            // parameterList
-            self.compile_parameterlist();
-
-            // ')'
-            assert_eq!(self.tokenizer.symbol(), ")");
-            self.tokenizer.advance();
-
-            // '{'
-            assert_eq!(self.tokenizer.symbol(), "{");
-            self.tokenizer.advance();
-            
-            // varDec*
-            let num_locals = self.compile_var_dec();
-
-            if function_declared {
-                // vm function subroutineName num_locals
-                self.vm_writer.write_function(&function_name, num_locals)
-            }
-
-            // statements
-            self.compile_statements();
-
-            // '}'
-            assert_eq!(self.tokenizer.symbol(), "}");
-            self.tokenizer.advance();
         }
     }
 
@@ -1206,6 +1253,10 @@ impl<'a> CompilationEngine<'a> {
                     "null" => {
                         // vm push 0
                         self.vm_writer.write_push(Segment::CONST, 0);
+                    },
+                    "this" => {
+                        // vm push pointer 0 (refers to base addr of this)
+                        self.vm_writer.write_push(Segment::POINTER, 0);
                     },
                     _ => {
                         self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
