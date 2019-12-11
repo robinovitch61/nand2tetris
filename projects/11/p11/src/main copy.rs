@@ -681,6 +681,7 @@ fn write_vm_code(tokens: &mut VecDeque<String>, file: &fs::File,
                     write_identifier(tokens, file, parent, class_var_type, &symbol_type, class_scope, subr_scope,
                         "Missing or invalid identifier or extra ',' in variable declaration");
                 }
+                // ';'
                 write_symbol(";", tokens, file,
                     "Missing ';' in variable declaration");
                 write_to_file(file, "</varDec>".to_string());

@@ -249,7 +249,7 @@ impl<'a> FileParser<'a> {
 //     JACK TOKENIZER
 // *****************************************
 #[derive(PartialEq, Debug, Clone, Copy)]
-enum TokenType {
+enum TokenKind {
     KEYWORD,
     SYMBOL,
     IDENTIFIER,
@@ -287,17 +287,18 @@ struct JackTokenizer<'a> {
     // fns:
     // - has_more_tokens -- returns bool
     // - advance -- advances index if has_more_tokens
-    // - token_type -- returns TokenType of current token
+    // - token_kind -- returns TokenKind of current token
     // - is_keyword
-    // - keyword -- returns keyword of current token (TokenType::KEYWORD only)
+    // - keyword -- returns keyword of current token (TokenKind::KEYWORD only)
     // - is_symbol
-    // - symbol -- returns symbol of current token (TokenType::SYMBOL only)
+    // - symbol -- returns symbol of current token (TokenKind::SYMBOL only)
     // - is_identifier
-    // - identifier -- returns identifier of current token (TokenType::IDENTIFIER only)
+    // - identifier -- returns identifier of current token (TokenKind::IDENTIFIER only)
     // - is_int_val
-    // - int_val -- returns integer value of current token (TokenType::INT_CONST only)
+    // - int_val -- returns integer value of current token (TokenKind::INT_CONST only)
     // - is_string_val
-    // - string_val -- returns string value of current token (TokenType::STRING_CONST only)
+    // - string_val -- returns string value of current token (TokenKind::STRING_CONST only)
+    // - is_builtin_type
 
     // lifetime means a JackTokenizer instance can't
     // outlive any token string references in tokens
@@ -337,24 +338,24 @@ impl<'a> JackTokenizer<'a> {
         &self.tokens[self.index]
     }
 
-    fn token_type(&self) -> TokenType {
+    fn token_kind(&self) -> TokenKind {
         let token = self.curr_token();
         if self.valid_keywords.contains(&token) {
-            TokenType::KEYWORD
+            TokenKind::KEYWORD
         } else if self.valid_symbols.contains(&token) {
-            TokenType::SYMBOL
+            TokenKind::SYMBOL
         } else if token.chars().nth(0).unwrap() == '"'
                 && token.chars().nth(token.len()-1).unwrap() == '"' {
-            TokenType::STRING_CONST
+            TokenKind::STRING_CONST
         } else if token.parse::<u32>().is_ok() {
-            TokenType::INT_CONST
+            TokenKind::INT_CONST
         } else {
-            TokenType::IDENTIFIER
+            TokenKind::IDENTIFIER
         }
     }
 
     fn is_keyword(&self) -> bool {
-        self.token_type() == TokenType::KEYWORD
+        self.token_kind() == TokenKind::KEYWORD
     }
 
     fn keyword(&self) -> &str {
@@ -363,7 +364,7 @@ impl<'a> JackTokenizer<'a> {
     }
 
     fn is_symbol(&self) -> bool {
-        self.token_type() == TokenType::SYMBOL
+        self.token_kind() == TokenKind::SYMBOL
     }
 
     fn symbol(&self) -> &str {
@@ -372,7 +373,7 @@ impl<'a> JackTokenizer<'a> {
     }
 
     fn is_identifier(&self) -> bool {
-        self.token_type() == TokenType::IDENTIFIER
+        self.token_kind() == TokenKind::IDENTIFIER
     }
 
     fn identifier(&self) -> &str {
@@ -381,7 +382,7 @@ impl<'a> JackTokenizer<'a> {
     }
 
     fn is_int_val(&self) -> bool {
-        self.token_type() == TokenType::INT_CONST
+        self.token_kind() == TokenKind::INT_CONST
     }
 
     fn int_val(&self) -> &str {
@@ -390,13 +391,17 @@ impl<'a> JackTokenizer<'a> {
     }
 
     fn is_string_val(&self) -> bool {
-        self.token_type() == TokenType::STRING_CONST
+        self.token_kind() == TokenKind::STRING_CONST
     }
 
     fn string_val(&self) -> &str {
         assert!(self.is_string_val());
         let token = self.curr_token();
         &token[1..token.len()-2]
+    }
+
+    fn is_builtin_type(&self) -> bool {
+        self.builtin_types.contains(&self.curr_token())
     }
 }
 
@@ -453,19 +458,31 @@ impl SymbolTable {
         count_kind
     }
 
-    fn define(&mut self, name: String, symbol_type: String, symbol_kind: Kind) {
+    fn define(&mut self, name: &str, symbol_type: &str, symbol_kind: Kind) {
         if name == "".to_string() { panic!("Invalid name in symbol table"); }
         match symbol_kind {
             Kind::STATIC | Kind::FIELD => {
-                if !self.ClassScope.contains_key(&name) {
+                if !self.ClassScope.contains_key(name) {
                     let id = self.var_count(&symbol_kind);
-                    self.ClassScope.insert(name.clone(), Identifier { name, symbol_type, symbol_kind, id });
+                    self.ClassScope.insert(name.to_string(),
+                        Identifier {
+                            name: name.to_string(),
+                            symbol_type: symbol_type.to_string(),
+                            symbol_kind,
+                            id 
+                        });
                 }
             }
             Kind::ARGUMENT | Kind::VAR => {
-                if !self.SubrScope.contains_key(&name) {
+                if !self.SubrScope.contains_key(name) {
                     let id = self.var_count(&symbol_kind);
-                    self.SubrScope.insert(name.clone(), Identifier { name, symbol_type, symbol_kind, id });
+                    self.SubrScope.insert(name.to_string(),
+                        Identifier {
+                            name: name.to_string(),
+                            symbol_type: symbol_type.to_string(),
+                            symbol_kind,
+                            id 
+                        });
                 }
             }
         }
@@ -636,6 +653,8 @@ impl VmWriter {
 #[derive(Debug)]
 struct CompilationEngine<'a> {
     // fns:
+    // - write_line (temp)
+    // - write_nonvoid_type (temp)
     // - compile_class
     // - compile_class_var_dec
     // - compile_subroutine
@@ -663,12 +682,25 @@ impl<'a> CompilationEngine<'a> {
             .expect("Failed to write line to file!");
     }
 
+    fn write_nonvoid_type(&mut self) {
+        if self.tokenizer.is_builtin_type() || self.tokenizer.is_identifier() {
+            // slightly redundant on purpose here as vm code in this block should be the same
+            if self.tokenizer.is_builtin_type() {
+                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
+            } else {
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
+            }
+        } else {
+            panic!("Invalid type in subroutine declaration");
+        }
+    }
+
     fn compile_class(&mut self) {
         self.write_line("<class>");
 
         // 'class'
         assert_eq!(self.tokenizer.keyword(), "class");
-        self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+        self.write_line("<keyword> class </keyword>");
         self.tokenizer.advance();
 
         // className
@@ -695,39 +727,64 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_class_var_dec(&mut self) {
-        loop {
-            if !self.tokenizer.is_keyword()
-            || !vec!["static", "field"].contains(&self.tokenizer.keyword()) {
-                return;
+        while vec!["static", "field"].contains(&self.tokenizer.curr_token()) {
+            self.write_line("<classVarDec>");
+
+            // ('static' | 'field')
+            let mut var_kind = Kind::FIELD;
+            if self.tokenizer.keyword() == "static" {
+                var_kind = Kind::STATIC
             }
-            
-            // MORE TODO
+            self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
+            self.tokenizer.advance();
+
+            // type
+            self.write_nonvoid_type();
+            let symbol_type = self.tokenizer.curr_token().to_string();
+            self.tokenizer.advance();
+
+            // varName
+            let name = self.tokenizer.curr_token().to_string();
+            self.symbol_table.define(&name, &symbol_type, var_kind);
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // (',' varName)*
+            while self.tokenizer.curr_token() == "," {
+                // ','
+                assert_eq!(self.tokenizer.symbol(), ",");
+                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                self.tokenizer.advance();
+
+                // varName
+                let name = self.tokenizer.curr_token().to_string();
+                self.symbol_table.define(&name, &symbol_type, var_kind);
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                self.tokenizer.advance();
+            }
+            // ';'
+            assert_eq!(self.tokenizer.symbol(), ";");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            self.write_line("</classVarDec>");
         }
     }
 
     fn compile_subroutine(&mut self) {
-        loop {
-            // ('constructor' | 'function' | 'method')
-            if !self.tokenizer.is_keyword()
-            || !vec!["constructor", "function", "method"].contains(&self.tokenizer.keyword()) {
-                return;
-            }
+        while vec!["constructor", "function", "method"].contains(&self.tokenizer.curr_token()) {
             self.symbol_table.start_subroutine(); // clear subroutine scope
+
+            self.write_line("<subroutineDec>");
+
             self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
             self.tokenizer.advance();
 
             // ('void' | type)
-            if self.tokenizer.is_keyword() && self.tokenizer.keyword() == "void" {
-                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
-            // keyword is builtin type
-            } else if self.tokenizer.is_keyword()
-                && self.tokenizer.builtin_types.contains(&self.tokenizer.keyword()) {
-                self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
-            // identifier assumed to be user defined type
-            } else if self.tokenizer.is_identifier() { 
-                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
+            if self.tokenizer.curr_token() == "void" {
+                self.write_line("<keyword> void </keyword>");
             } else {
-                panic!("Invalid type in subroutine declaration");
+                self.write_nonvoid_type();
             }
             self.tokenizer.advance();
 
@@ -748,7 +805,9 @@ impl<'a> CompilationEngine<'a> {
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
 
-           // '{'
+            self.write_line("<subroutineBody>");
+
+            // '{'
             assert_eq!(self.tokenizer.symbol(), "{");
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
@@ -763,39 +822,243 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), "}");
             self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
             self.tokenizer.advance();
+
+            self.write_line("</subroutineBody>");
+            self.write_line("</subroutineDec>");
         }
     }
 
     fn compile_parameterlist(&mut self) {
+        self.write_line("<parameterList>");
 
+        if self.tokenizer.curr_token() != ")" {
+            // type
+            self.write_nonvoid_type();
+            let symbol_type = self.tokenizer.curr_token().to_string();
+            self.tokenizer.advance();
+
+            // varName
+            let name = self.tokenizer.curr_token().to_string();
+            self.symbol_table.define(&name, &symbol_type, Kind::ARGUMENT);
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // (',' type varName)*
+            while self.tokenizer.curr_token() == "," {
+                // ','
+                assert_eq!(self.tokenizer.symbol(), ",");
+                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                self.tokenizer.advance();
+
+                // type
+                self.write_nonvoid_type();
+                let symbol_type = self.tokenizer.curr_token().to_string();
+                self.tokenizer.advance();
+
+                // varName
+                let name = self.tokenizer.curr_token().to_string();
+                self.symbol_table.define(&name, &symbol_type, Kind::ARGUMENT);
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                self.tokenizer.advance();
+            }
+        }
+
+        self.write_line("</parameterList>");
     }
 
     fn compile_var_dec(&mut self) {
+        while self.tokenizer.curr_token() == "var" {
+            self.write_line("<varDec>");
+            // 'var'
+            assert_eq!(self.tokenizer.keyword(), "var");
+            self.write_line("<keyword> var </keyword>");
+            self.tokenizer.advance();
 
+            // type
+            self.write_nonvoid_type();
+            let symbol_type = self.tokenizer.curr_token().to_string();
+            self.tokenizer.advance();
+
+            // varName
+            let name = self.tokenizer.curr_token().to_string();
+            self.symbol_table.define(&name, &symbol_type, Kind::VAR);
+            self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+            self.tokenizer.advance();
+
+            // (',' varName)*
+            while self.tokenizer.curr_token() == "," {
+                // ','
+                assert_eq!(self.tokenizer.symbol(), ",");
+                self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+                self.tokenizer.advance();
+
+                // varName
+                let name = self.tokenizer.curr_token().to_string();
+                self.symbol_table.define(&name, &symbol_type, Kind::VAR);
+                self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                self.tokenizer.advance();
+            }
+
+            // ';'
+            assert_eq!(self.tokenizer.symbol(), ";");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            self.write_line("</varDec>");
+        }
     }
 
     fn compile_statements(&mut self) {
+        while self.tokenizer.is_keyword() 
+        && vec!["let", "if", "while", "do", "return"].contains(&self.tokenizer.keyword()) {
+            self.write_line("<statements>");
+            
+            match self.tokenizer.keyword() {
+                "do" => self.compile_do(),
+                "let" => self.compile_let(),
+                "while" => self.compile_while(),
+                "return" => self.compile_return(),
+                "if" => self.compile_if(),
+                _ => panic!("Invalid keyword in statement")
+            }
 
+            self.write_line("</statements>");
+        }
     }
 
     fn compile_do(&mut self) {
+        self.write_line("<doStatement>");
 
+        // 'do'
+        assert_eq!(self.tokenizer.keyword(), "do");
+        self.write_line("<keyword> do </keyword>");
+        self.tokenizer.advance();
+
+        self.write_line("</doStatement>");
     }
 
     fn compile_let(&mut self) {
+        self.write_line("<letStatement>");
 
+        // 'let'
+        assert_eq!(self.tokenizer.keyword(), "let");
+        self.write_line("<keyword> let </keyword>");
+        self.tokenizer.advance();
+
+        // varName
+        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+        self.tokenizer.advance();
+
+        // ('[' expression ']')?
+        if self.tokenizer.curr_token() == "[" {
+            // '['
+            assert_eq!(self.tokenizer.symbol(), "[");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // expression
+            self.compile_expression();
+
+            // ']'
+            assert_eq!(self.tokenizer.symbol(), "]");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+        }
+
+        // '='
+        assert_eq!(self.tokenizer.symbol(), "=");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // expression
+        self.compile_expression();
+
+        // ';'
+        assert_eq!(self.tokenizer.symbol(), ";");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        self.write_line("</letStatement>");
     }
 
     fn compile_while(&mut self) {
+        self.write_line("<whileStatement>");
 
+        // 'while'
+        assert_eq!(self.tokenizer.keyword(), "while");
+        self.write_line("<keyword> while </keyword>");
+        self.tokenizer.advance();
+
+        self.write_line("</whileStatement>");
     }
 
     fn compile_return(&mut self) {
+        self.write_line("<returnStatement>");
 
+        // 'return'
+        assert_eq!(self.tokenizer.keyword(), "return");
+        self.write_line("<keyword> return </keyword>");
+        self.tokenizer.advance();
+
+        self.write_line("</returnStatement>");
     }
 
     fn compile_if(&mut self) {
+        self.write_line("<ifStatement>");
 
+        // 'if'
+        assert_eq!(self.tokenizer.keyword(), "if");
+        self.write_line("<keyword> if </keyword>");
+        self.tokenizer.advance();
+
+        // '('
+        assert_eq!(self.tokenizer.symbol(), "(");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // expression
+        self.compile_expression();
+
+        // ')'
+        assert_eq!(self.tokenizer.symbol(), ")");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // '{'
+        assert_eq!(self.tokenizer.symbol(), "{");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // statements
+        self.compile_statements();
+
+        // '}'
+        assert_eq!(self.tokenizer.symbol(), "}");
+        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+        self.tokenizer.advance();
+
+        // ('else' '{' statements '}')?
+        if self.tokenizer.curr_token() == "else" {
+            // 'else'
+            assert_eq!(self.tokenizer.keyword(), "else");
+            self.write_line("<keyword> else </keyword>");
+            self.tokenizer.advance();
+            
+            // '{'
+            assert_eq!(self.tokenizer.symbol(), "{");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+
+            // statements
+            self.compile_statements();
+
+            // '}'
+            assert_eq!(self.tokenizer.symbol(), "}");
+            self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
+            self.tokenizer.advance();
+        }
+
+        self.write_line("</ifStatement>");
     }
 
     fn compile_expression(&mut self) {
