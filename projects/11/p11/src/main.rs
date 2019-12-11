@@ -418,6 +418,7 @@ impl<'a> JackTokenizer<'a> {
             "&" => MathCommand::AND,
             "|" => MathCommand::OR,
             "*" => MathCommand::MULT,
+            "/" => MathCommand::DIV,
             _ => panic!("Invalid symbol for math command")
         }
     }
@@ -583,14 +584,13 @@ enum Segment {
 enum MathCommand {
     ADD,
     SUB,
-    // NEG,
     EQUAL,
     GT,
     LT,
     AND,
     OR,
-    // NOT,
     MULT,
+    DIV,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -655,6 +655,7 @@ impl<'a> VmWriter<'a> {
             MathCommand::AND => { "and" },
             MathCommand::OR => { "or" },
             MathCommand::MULT => { "call Math.multiply 2" },
+            MathCommand::DIV => { "call Math.divide 2" },
         };
         self.output_file.write_all(format!("{}\n", line).as_bytes())
             .expect("Failed to write line to file");
@@ -734,8 +735,6 @@ struct CompilationEngine<'a> {
     symbol_table: SymbolTable,
     vm_writer: VmWriter<'a>,
     output_file: &'a fs::File, // remove later
-    num_args: u8,
-    num_locals: u8,
     class_name: String,
 }
 
@@ -871,10 +870,10 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
             
             // varDec*
-            self.compile_var_dec();
+            let num_locals = self.compile_var_dec();
 
             if function_declared {
-                self.vm_writer.write_function(&function_name, self.num_locals)
+                self.vm_writer.write_function(&function_name, num_locals)
             }
 
             // statements
@@ -920,9 +919,11 @@ impl<'a> CompilationEngine<'a> {
         }
     }
 
-    fn compile_var_dec(&mut self) {
+    fn compile_var_dec(&mut self) -> u8 {
+        let mut num_locals = 0;
+
         while self.tokenizer.curr_token() == "var" {
-            self.num_locals = 1;
+            num_locals += 1;
 
             // 'var'
             assert_eq!(self.tokenizer.keyword(), "var");
@@ -942,7 +943,7 @@ impl<'a> CompilationEngine<'a> {
 
             // (',' varName)*
             while self.tokenizer.curr_token() == "," {
-                self.num_locals += 1;
+                num_locals += 1;
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
@@ -963,6 +964,7 @@ impl<'a> CompilationEngine<'a> {
 
             self.write_line("</varDec>");
         }
+        num_locals
     }
 
     fn compile_statements(&mut self) {
@@ -1247,18 +1249,18 @@ impl<'a> CompilationEngine<'a> {
         }
     }
 
-    fn compile_expression_list(&mut self) {
-        self.num_args = 0;
+    fn compile_expression_list(&mut self) -> u8 {
+        let mut num_args = 0;
 
         if self.tokenizer.curr_token() != ")" {
-            self.num_args += 1;
+            num_args += 1;
 
             // expression
             self.compile_expression();
 
             // (',' expression)*
             while self.tokenizer.curr_token() == "," {
-                self.num_args += 1;
+                num_args += 1;
 
                 // ','
                 assert_eq!(self.tokenizer.symbol(), ",");
@@ -1268,6 +1270,7 @@ impl<'a> CompilationEngine<'a> {
                 self.compile_expression();
             }
         }
+        num_args
     }
 
     fn compile_subroutine_call(&mut self) {
@@ -1282,13 +1285,13 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // expressionList
-            self.compile_expression_list();
+            let num_args = self.compile_expression_list();
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
 
-            self.vm_writer.write_call(&subroutine_name, self.num_args);
+            self.vm_writer.write_call(&subroutine_name, num_args);
         }
         // (className | varName) '.' subroutineName '(' expressionList ')'
         else if self.tokenizer.next_token() == "." { 
@@ -1308,13 +1311,13 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // expressionList
-            self.compile_expression_list();
+            let num_args = self.compile_expression_list();
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
 
-            self.vm_writer.write_call(&subroutine_name, self.num_args);
+            self.vm_writer.write_call(&subroutine_name, num_args);
         } else {
             panic!("Invalid subroutine call");
         }
@@ -1356,8 +1359,6 @@ fn main() {
             symbol_table,
             vm_writer,
             output_file, // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
-            num_args: 0,
-            num_locals: 0,
             class_name: "".to_string(),
         };
         compiler.compile_class();
