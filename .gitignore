@@ -1,6 +1,7 @@
 target
 Cargo.lock
 test*.txt
+*.ipynb
 *.asm
 *.hack
 *.dat

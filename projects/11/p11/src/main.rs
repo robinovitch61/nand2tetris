@@ -393,7 +393,7 @@ impl<'a> JackTokenizer<'a> {
     fn string_val(&self) -> &str {
         assert!(self.is_string_val());
         let token = self.curr_token();
-        &token[1..token.len()-2]
+        &token[1..token.len()-1]
     }
 
     fn is_builtin_type(&self) -> bool {
@@ -709,7 +709,6 @@ impl<'a> VmWriter<'a> {
         let mut char_decimal;
         for c in string.chars() {
             char_decimal = c as u32; // convert to unicode
-            println!("{} - {}: {}", string, c, char_decimal);
             self.write_push(Segment::CONST, char_decimal);
             self.write_call("String.appendChar", 2);
         }
@@ -863,6 +862,11 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), "(");
             self.tokenizer.advance();
 
+            if subroutine_kind == "method" {
+                // add current class object 'this' to symbol table (for 'method')
+                self.symbol_table.define("this", &self.class_name, Kind::ARGUMENT);
+            }
+
             // parameterList
             self.compile_parameterlist();
 
@@ -893,9 +897,6 @@ impl<'a> CompilationEngine<'a> {
                 // vm pop pointer 0 (anchor this at base addr)
                 self.vm_writer.write_pop(Segment::POINTER, 0);
             } else if subroutine_kind == "method" {
-                // add current class object 'this' to symbol table (for 'method')
-                self.symbol_table.define("this", &self.class_name, Kind::ARGUMENT);
-
                 // vm push argument 0, then pop pointer 0 (anchor this at base addr)
                 self.vm_writer.write_push(Segment::ARG, 0);
                 self.vm_writer.write_pop(Segment::POINTER, 0);
@@ -1147,6 +1148,7 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_if(&mut self) {
+
         // 'if'
         assert_eq!(self.tokenizer.keyword(), "if");
         self.tokenizer.advance();
@@ -1246,8 +1248,8 @@ impl<'a> CompilationEngine<'a> {
                 match self.tokenizer.keyword() {
                     "true" => {
                         // vm push -1
-                        self.vm_writer.write_push(Segment::CONST, 1);
-                        self.vm_writer.write_unary_arithmetic(UnaryMathCommand::NEG);
+                        self.vm_writer.write_push(Segment::CONST, 0);
+                        self.vm_writer.write_unary_arithmetic(UnaryMathCommand::NOT);
                     },
                     "false" => {
                         // vm push 0
@@ -1381,15 +1383,15 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), "(");
             self.tokenizer.advance();
 
+            // vm push pointer 0
+            self.vm_writer.write_push(Segment::POINTER, 0);
+
             // expressionList (add 1 arg for this)
             let num_args = self.compile_expression_list() + 1;
 
             // ')'
             assert_eq!(self.tokenizer.symbol(), ")");
             self.tokenizer.advance();
-
-            // vm push pointer 0
-            self.vm_writer.write_push(Segment::POINTER, 0);
 
             // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
