@@ -112,7 +112,7 @@ impl<'a> FileParser<'a> {
         let mut mod_comment = is_comment;
 
         // check if line begins multi-line comment '/**'
-        let idx_start_ml: i32 = match mod_line.find("/**") {
+        let idx_start_ml: i32 = match mod_line.find("/*") {
             Some(idx) => idx as i32,
             _ => -1
         };
