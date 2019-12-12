@@ -1,26 +1,7 @@
 // Compiler for the Nand2Tetris Jack Programming Language
 // Author: Leo Robinovitch
 
-
-/* TODO:
-- [X] Refactor to use actual modules
-- [] Get subroutine names with dots, e.g. 'a.b()'
-- [] Implement expression VM code using provided algorithm
-- [] Implement if and while loop VM code using provided VM code
-  - [] Must generate unique labels L1, L2, etc. for every one
-- [] Implement VM code for objects using this (pointer 0)
-- [] Implement VM code for arrays using this (pointer 1)
-- [] Implement compilation of constructors
-  - NOTE: No VM code for "class" definition or method definition
-  (e.g. constructor Point new()), just adds to symbol table
-- [] Implement VM code for method calls and void method calls
-- [] Implement VM code for array initialization and access
-- [] Implement VM code for 'do subroutine' (throwing out return value with pop temp 0!)
-*/
-
-#![allow(clippy::cognitive_complexity)]
 #![allow(non_snake_case)]
-#![allow(clippy::too_many_arguments)]
 #![allow(non_camel_case_types)]
 
 use std::fs;
@@ -81,12 +62,13 @@ impl<'a> FileParser<'a> {
                 }
             }
             _ => {
-                let paths = fs::read_dir(&self.input_path).unwrap();
+                let paths = fs::read_dir(&self.input_path)
+                    .expect("Failed to read directory");
     
                 let mut ext_paths: Vec<PathBuf> = Vec::new();
                 for direntry in paths {
                     let path = direntry.unwrap().path();
-                    if path.extension().unwrap() == self.input_extension {
+                    if path.extension().is_some() && path.extension().unwrap() == self.input_extension {
                         ext_paths.push(path);
                     }
                 }
@@ -128,8 +110,6 @@ impl<'a> FileParser<'a> {
     fn remove_comments(&'a self, line: &'a str, is_comment: bool) -> (&'a str, bool) {
         let mut mod_line = line;
         let mut mod_comment = is_comment;
-
-        // TODO: add removal of "/* a comment */"
 
         // check if line begins multi-line comment '/**'
         let idx_start_ml: i32 = match mod_line.find("/**") {
@@ -269,7 +249,6 @@ struct JackTokenizer<'a> {
     // - is_symbol
     // - symbol -- returns symbol of current token (TokenKind::SYMBOL only)
     // - is_identifier
-    // - identifier -- returns identifier of current token (TokenKind::IDENTIFIER only)
     // - is_int_val
     // - int_val -- returns integer value of current token (TokenKind::INT_CONST only)
     // - is_string_val
@@ -341,7 +320,7 @@ impl<'a> JackTokenizer<'a> {
             TokenKind::STRING_CONST
         } else if token.parse::<u32>().is_ok() {
             if token.parse::<u32>().unwrap() > 32767 {
-                panic!("Integer larger than 32767");
+                panic!("Integer larger than max val of 2^15-1=32767");
             } else {
                 TokenKind::INT_CONST
             }
@@ -370,11 +349,6 @@ impl<'a> JackTokenizer<'a> {
 
     fn is_identifier(&self) -> bool {
         self.token_kind() == TokenKind::IDENTIFIER
-    }
-
-    fn identifier(&self) -> &str {
-        assert!(self.is_identifier());
-        self.curr_token()
     }
 
     fn is_int_val(&self) -> bool {
@@ -723,7 +697,7 @@ impl<'a> VmWriter<'a> {
 struct CompilationEngine<'a> {
     // fns:
     // - write_line (temp)
-    // - write_nonvoid_type (temp)
+    // - check_nonvoid_type (temp)
     // - compile_class
     // - compile_class_var_dec
     // - compile_subroutine
@@ -743,47 +717,29 @@ struct CompilationEngine<'a> {
     tokenizer: JackTokenizer<'a>,
     symbol_table: SymbolTable,
     vm_writer: VmWriter<'a>,
-    output_file: &'a fs::File, // remove later
     class_name: String,
     label_count: u32,
 }
 
 impl<'a> CompilationEngine<'a> {
 
-    fn write_line(&mut self, line: &str) {
-        self.output_file.write_all(format!("{}\n", line).as_bytes())
-            .expect("Failed to write line to file!");
-    }
-
-    fn write_nonvoid_type(&mut self) {
-        if self.tokenizer.is_builtin_type() || self.tokenizer.is_identifier() {
-            // // slightly redundant on purpose here as vm code in this block should be the same
-            // if self.tokenizer.is_builtin_type() {
-            //     self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()))
-            // } else {
-            //     self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()))
-            // }
-        } else {
+    fn check_nonvoid_type(&mut self) {
+        if !self.tokenizer.is_builtin_type() && !self.tokenizer.is_identifier() {
             panic!("Invalid type in subroutine declaration");
         }
     }
 
     fn compile_class(&mut self) {
-        // self.write_line("<class>");
-
         // 'class'
         assert_eq!(self.tokenizer.keyword(), "class");
-        // self.write_line("<keyword> class </keyword>");
         self.tokenizer.advance();
 
         // className
         self.class_name = self.tokenizer.curr_token().to_string();
-        // self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
         self.tokenizer.advance();
 
         // '{'
         assert_eq!(self.tokenizer.symbol(), "{");
-        // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
         self.tokenizer.advance();
 
         // classVarDec
@@ -794,9 +750,6 @@ impl<'a> CompilationEngine<'a> {
 
         // '}'
         assert_eq!(self.tokenizer.symbol(), "}");
-        // self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
-
-        // self.write_line("</class>");
     }
 
     fn compile_class_var_dec(&mut self) {
@@ -809,7 +762,7 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // type
-            self.write_nonvoid_type();
+            self.check_nonvoid_type();
             let symbol_type = self.tokenizer.curr_token().to_string();
             self.tokenizer.advance();
 
@@ -837,7 +790,8 @@ impl<'a> CompilationEngine<'a> {
 
     fn compile_subroutine(&mut self) {
         while vec!["constructor", "function", "method"].contains(&self.tokenizer.curr_token()) {
-            self.symbol_table.start_subroutine(); // clear subroutine scope
+            // clear previous subroutine scope from symbol table
+            self.symbol_table.start_subroutine();
 
             // ('constructor' | 'function' | 'method')
             let subroutine_kind = self.tokenizer.curr_token().to_string();
@@ -846,7 +800,7 @@ impl<'a> CompilationEngine<'a> {
             // ('void' | type)
             if self.tokenizer.curr_token() == "void" {
             } else {
-                self.write_nonvoid_type();
+                self.check_nonvoid_type();
             }
             self.tokenizer.advance();
 
@@ -914,7 +868,7 @@ impl<'a> CompilationEngine<'a> {
     fn compile_parameterlist(&mut self) {
         if self.tokenizer.curr_token() != ")" {
             // type
-            self.write_nonvoid_type();
+            self.check_nonvoid_type();
             let symbol_type = self.tokenizer.curr_token().to_string();
             self.tokenizer.advance();
 
@@ -930,7 +884,7 @@ impl<'a> CompilationEngine<'a> {
                 self.tokenizer.advance();
 
                 // type
-                self.write_nonvoid_type();
+                self.check_nonvoid_type();
                 let symbol_type = self.tokenizer.curr_token().to_string();
                 self.tokenizer.advance();
 
@@ -953,7 +907,7 @@ impl<'a> CompilationEngine<'a> {
             self.tokenizer.advance();
 
             // type
-            self.write_nonvoid_type();
+            self.check_nonvoid_type();
             let symbol_type = self.tokenizer.curr_token().to_string();
             self.tokenizer.advance();
 
@@ -1264,7 +1218,6 @@ impl<'a> CompilationEngine<'a> {
                         self.vm_writer.write_push(Segment::POINTER, 0);
                     },
                     _ => {
-                        self.write_line(&format!("<keyword> {} </keyword>", self.tokenizer.keyword()));
                         panic!("Unhandled keyword!");
                     }
                 }
@@ -1374,7 +1327,7 @@ impl<'a> CompilationEngine<'a> {
     fn compile_subroutine_call(&mut self) {
         // subroutineName '(' expressionList ')'
         if self.tokenizer.next_token() == "(" {
-            // subroutineName -- this will be a method of the current class
+            // subroutineName -- a method of the current class (equivalent to "this.subroutine()")
             let object_name = self.tokenizer.curr_token().to_string();
             let subroutine_name = format!("{}.{}", self.class_name, object_name);
             self.tokenizer.advance();
@@ -1386,7 +1339,7 @@ impl<'a> CompilationEngine<'a> {
             // vm push pointer 0
             self.vm_writer.write_push(Segment::POINTER, 0);
 
-            // expressionList (add 1 arg for this)
+            // expressionList (add 1 arg for this since calling a method)
             let num_args = self.compile_expression_list() + 1;
 
             // ')'
@@ -1414,8 +1367,7 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), "(");
             self.tokenizer.advance();
 
-            // check if method call from some object in scope
-            // otherwise can assume .new() call or referencing OS
+            // check if method call based on if object in scope
             if self.symbol_table.contains(&object_name) {
                 subroutine_name = subroutine_name.replace(
                     &object_name,
@@ -1453,13 +1405,13 @@ impl<'a> CompilationEngine<'a> {
 fn main() {
     let file_parser = FileParser::from_user_args("jack", "vm");
     let input_paths = file_parser.get_filepaths();
-    let mut label_count = 0;
+    // let mut label_count = 0;
     for input_path in &input_paths {
         // path stuff
         let output_path = &file_parser.get_output_filepath(input_path);
         let input_path_string = file_parser.get_path_string(input_path);
         let output_path_string = file_parser.get_path_string(output_path);
-        println!("Compiling {} to {}", input_path_string, output_path_string);
+        println!("\nCompiling {}\n       to {}", input_path_string, output_path_string);
 
         // file i/o
         let output_file = &file_parser.get_writeable_file(output_path);
@@ -1470,7 +1422,7 @@ fn main() {
         let tokens = file_parser.tokenize_for_jack(file_contents);
         let tokenizer = JackTokenizer{ tokens, ..Default::default() };
 
-        // new symbol table
+        // create symbol table
         let symbol_table = SymbolTable{
             ClassScope: HashMap::new(),
             SubrScope: HashMap::new(),
@@ -1481,11 +1433,10 @@ fn main() {
             tokenizer, 
             symbol_table,
             vm_writer,
-            output_file, // EVENTUALLY DON'T NEED OUTPUT_FILE HERE AS TOKENIZER WILL DO NO WRITING
             class_name: "".to_string(),
-            label_count,
+            label_count: 0,
         };
         compiler.compile_class();
-        label_count = compiler.label_count;
+        // label_count = compiler.label_count;
     }
 }
