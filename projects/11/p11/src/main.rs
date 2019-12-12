@@ -709,6 +709,7 @@ impl<'a> VmWriter<'a> {
         let mut char_decimal;
         for c in string.chars() {
             char_decimal = c as u32; // convert to unicode
+            println!("{} - {}: {}", string, c, char_decimal);
             self.write_push(Segment::CONST, char_decimal);
             self.write_call("String.appendChar", 2);
         }
@@ -1411,17 +1412,9 @@ impl<'a> CompilationEngine<'a> {
             assert_eq!(self.tokenizer.symbol(), "(");
             self.tokenizer.advance();
 
-            // expressionList
-            let mut num_args = self.compile_expression_list();
-
-            // ')'
-            assert_eq!(self.tokenizer.symbol(), ")");
-            self.tokenizer.advance();
-
             // check if method call from some object in scope
             // otherwise can assume .new() call or referencing OS
             if self.symbol_table.contains(&object_name) {
-                num_args += 1;
                 subroutine_name = subroutine_name.replace(
                     &object_name,
                     &self.symbol_table.type_of(&object_name)
@@ -1432,6 +1425,16 @@ impl<'a> CompilationEngine<'a> {
                 let segment = self.tokenizer.kind_to_segment(kind);
                 self.vm_writer.write_push(segment, index);
             }
+
+            // expressionList
+            let mut num_args = self.compile_expression_list();
+            if self.symbol_table.contains(&object_name) {
+                num_args += 1;
+            }
+
+            // ')'
+            assert_eq!(self.tokenizer.symbol(), ")");
+            self.tokenizer.advance();
 
             // vm call subroutine num_args
             self.vm_writer.write_call(&subroutine_name, num_args);
