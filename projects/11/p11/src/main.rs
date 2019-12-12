@@ -608,6 +608,7 @@ struct VmWriter<'a> {
     // - write_call (args: name, n_args)
     // - write_function (args: name, n_locals)
     // - write_return
+    // - write_string
     output_file: &'a fs::File,
 }
 
@@ -700,6 +701,17 @@ impl<'a> VmWriter<'a> {
     fn write_return(&mut self) {
         self.output_file.write_all("return\n".as_bytes())
             .expect("Failed to write line to file");
+    }
+
+    fn write_string(&mut self, string: &str) {
+        self.write_push(Segment::CONST, string.chars().count() as u32);
+        self.write_call("String.new", 1);
+        let mut char_decimal;
+        for c in string.chars() {
+            char_decimal = c as u32; // convert to unicode
+            self.write_push(Segment::CONST, char_decimal);
+            self.write_call("String.appendChar", 2);
+        }
     }
 }
 
@@ -1000,6 +1012,8 @@ impl<'a> CompilationEngine<'a> {
     }
 
     fn compile_let(&mut self) {
+        let mut array_access = false;
+
         // 'let'
         assert_eq!(self.tokenizer.keyword(), "let");
         self.tokenizer.advance();
@@ -1012,6 +1026,11 @@ impl<'a> CompilationEngine<'a> {
 
         // ('[' expression ']')?
         if self.tokenizer.curr_token() == "[" {
+            array_access = true;
+
+            // vm push array
+            self.vm_writer.write_push(segment, index);
+
             // '['
             assert_eq!(self.tokenizer.symbol(), "[");
             self.tokenizer.advance();
@@ -1022,6 +1041,9 @@ impl<'a> CompilationEngine<'a> {
             // ']'
             assert_eq!(self.tokenizer.symbol(), "]");
             self.tokenizer.advance();
+
+            // vm add
+            self.vm_writer.write_arithmetic(MathCommand::ADD);
         }
 
         // '='
@@ -1031,8 +1053,22 @@ impl<'a> CompilationEngine<'a> {
         // expression
         self.compile_expression();
 
-        // vn pop segment index
-        self.vm_writer.write_pop(segment, index);
+        if array_access {
+            // vm pop temp 0 (store right side result in temp 0)
+            self.vm_writer.write_pop(Segment::TEMP, 0);
+            
+            // vm pop pointer 1 (store RAM addr of arr[expr] in to pointer 1)
+            self.vm_writer.write_pop(Segment::POINTER, 1);
+
+            // vm push temp 0
+            self.vm_writer.write_push(Segment::TEMP, 0);
+
+            // vm pop that 0
+            self.vm_writer.write_pop(Segment::THAT, 0);
+        } else {
+            // vm pop segment index
+            self.vm_writer.write_pop(segment, index);
+        }
 
         // ';'
         assert_eq!(self.tokenizer.symbol(), ";");
@@ -1202,7 +1238,7 @@ impl<'a> CompilationEngine<'a> {
                 self.tokenizer.advance();
             },
             TokenKind::STRING_CONST => {
-                self.write_line(&format!("<stringConstant> {} </stringConstant>", self.tokenizer.string_val()));
+                self.vm_writer.write_string(self.tokenizer.string_val());
                 self.tokenizer.advance();
             },
             TokenKind::KEYWORD => {
@@ -1233,14 +1269,19 @@ impl<'a> CompilationEngine<'a> {
             },
             TokenKind::IDENTIFIER => {
                 match self.tokenizer.next_token() {
+                    // array access array[n]
+                    // pop base addr + n of array to pointer 1
+                    // push that 0 to get array[n]
                     "[" => { // varName '[' expression ']'
-                        // varName
-                        self.write_line(&format!("<identifier> {} </identifier>", self.tokenizer.identifier()));
+                        // vm push segment index (push base addr of array to stack)
+                        let kind = self.symbol_table.kind_of(self.tokenizer.curr_token());
+                        let index = self.symbol_table.index_of(self.tokenizer.curr_token());
+                        let segment = self.tokenizer.kind_to_segment(kind);
+                        self.vm_writer.write_push(segment, index);
                         self.tokenizer.advance();
 
                         // '['
                         assert_eq!(self.tokenizer.symbol(), "[");
-                        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                         self.tokenizer.advance();
 
                         // expression
@@ -1248,13 +1289,23 @@ impl<'a> CompilationEngine<'a> {
 
                         // ']'
                         assert_eq!(self.tokenizer.symbol(), "]");
-                        self.write_line(&format!("<symbol> {} </symbol>", self.tokenizer.symbol()));
                         self.tokenizer.advance();
+
+                        // vm add to get base addr + n on top of stack
+                        self.vm_writer.write_arithmetic(MathCommand::ADD);
+
+                        // vm pop base addr + n to pointer 1
+                        self.vm_writer.write_pop(Segment::POINTER, 1);
+
+                        // vm push that 0 to stack
+                        self.vm_writer.write_push(Segment::THAT, 0);
                     },
+                    // subroutine call
                     "(" | "." => {
                         self.compile_subroutine_call();
                     },
-                    _ => { // varName - vm push segment index
+                    // varName
+                    _ => { // vm push segment index
                         let kind = self.symbol_table.kind_of(self.tokenizer.curr_token());
                         let index = self.symbol_table.index_of(self.tokenizer.curr_token());
                         let segment = self.tokenizer.kind_to_segment(kind);
