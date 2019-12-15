@@ -1,4 +1,4 @@
-// Compiler for the Nand2Tetris Jack Programming Language
+// Complete Compiler for the Nand2Tetris Jack Programming Language
 // Author: Leo Robinovitch
 
 #![allow(non_snake_case)]
@@ -205,7 +205,9 @@ impl<'a> FileParser<'a> {
         
             let capture = match RE.find(line){
                 Some(cap) => cap,
-                _ => panic!("No token found")
+                _ => {
+                    panic!(format!("\n\nNo token found in\n'{}'\n\n", line))
+                }
             };
             let token = &line[capture.start()..capture.end()];
             (token, capture.end())

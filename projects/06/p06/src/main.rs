@@ -1,3 +1,5 @@
+// Assembler (Mnemonics -> Machine Code) for the Nand2Tetris Hack Computer
+// Author: Leo Robinovitch
 
 use std::fs::File;
 use std::path::Path;

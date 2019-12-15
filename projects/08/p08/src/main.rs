@@ -1,4 +1,4 @@
-// VM Translator for the Nand2Tetris Hack Computer
+// Complete VM Translator for the Nand2Tetris Hack Computer
 // Author: Leo Robinovitch
 
 use std::fs;
