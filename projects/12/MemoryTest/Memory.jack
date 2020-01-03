@@ -38,6 +38,10 @@ class Memory {
     function int alloc(int size) {
         var int blockBase, block, offset;
 
+        if (size < 1) {
+            let size = 1; // need at least one for blockBase pointer
+        }
+
         let blockBase = freeList;
         while (blockBase[1] < (size + 2)) { // while block too small
             if (blockBase[0] = 0) {
