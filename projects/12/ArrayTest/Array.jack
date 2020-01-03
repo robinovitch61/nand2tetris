@@ -15,15 +15,12 @@ class Array {
 
     /** Constructs a new Array of the given size. */
     function Array new(int size) {
-        var Array newArr;
-
         // can be removed when not testing in isolation
         if (size < 1) {
             let size = 1;
         }
 
-        let newArr = Memory.alloc(size);
-        return newArr;
+        return Memory.alloc(size);
     }
 
     /** Disposes this array. */
