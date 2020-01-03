@@ -9,27 +9,27 @@
  * consists of 32,768 words, each holding a 16-bit binary number.
  */ 
 class Memory {
-    static Array ram, heap;
-    static int freeList;
+    static Array RAM, HEAP;
+    static int FREE_LIST;
 
     /** Initializes the class. */
     function void init() {
-        let ram = 0;
-        let heap = 2048;
-        let heap[0] = 0; // next
-        let heap[1] = 14335; // length
-        let freeList = heap;
+        let RAM = 0;
+        let HEAP = 2048;
+        let HEAP[0] = 0; // next
+        let HEAP[1] = 14335; // length
+        let FREE_LIST = HEAP;
         return;
     }
 
     /** Returns the RAM value at the given address. */
     function int peek(int address) {
-        return ram[address];
+        return RAM[address];
     }
 
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
-        let ram[address] = value;
+        let RAM[address] = value;
         return;
     }
 
@@ -42,7 +42,7 @@ class Memory {
             let size = 1; // need at least one for blockBase pointer
         }
 
-        let blockBase = freeList;
+        let blockBase = FREE_LIST;
         while (blockBase[1] < (size + 2)) { // while block too small
             if (blockBase[0] = 0) {
                 do Sys.error(404); // no next block
@@ -65,7 +65,7 @@ class Memory {
     function void deAlloc(Array o) {
         var int blockBase;
         
-        let blockBase = freeList;
+        let blockBase = FREE_LIST;
         while (~(blockBase[0] = 0)) {
             let blockBase = blockBase[0];
         }

@@ -1,0 +1,106 @@
+function Screen.init 0
+push constant 0
+not
+pop static 0
+push constant 16384
+pop static 1
+push constant 512
+pop static 2
+push constant 256
+pop static 3
+push constant 16
+pop static 4
+push static 2
+push static 4
+call Math.divide 2
+pop static 5
+push static 3
+push static 5
+call Math.multiply 2
+pop static 6
+push constant 0
+return
+function Screen.clearScreen 1
+push constant 0
+pop local 0
+label WHILE_EXP0
+push local 0
+push static 6
+lt
+not
+if-goto WHILE_END0
+push local 0
+push static 1
+add
+push constant 0
+pop temp 0
+pop pointer 1
+push temp 0
+pop that 0
+push local 0
+push constant 1
+add
+pop local 0
+goto WHILE_EXP0
+label WHILE_END0
+push constant 0
+return
+function Screen.setColor 0
+push argument 0
+pop static 0
+push constant 0
+return
+function Screen.drawPixel 3
+push static 5
+push argument 1
+call Math.multiply 2
+push argument 0
+push static 4
+call Math.divide 2
+add
+pop local 0
+push static 1
+push local 0
+add
+call Memory.peek 1
+pop local 1
+push argument 0
+push constant 15
+and
+call Math.twoToThe 1
+pop local 2
+push static 0
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push static 1
+push local 0
+add
+push local 1
+push local 2
+or
+call Memory.poke 2
+pop temp 0
+goto IF_END0
+label IF_FALSE0
+push static 1
+push local 0
+add
+push local 1
+push local 2
+not
+and
+call Memory.poke 2
+pop temp 0
+label IF_END0
+push constant 0
+return
+function Screen.drawLine 0
+push constant 0
+return
+function Screen.drawRectangle 0
+push constant 0
+return
+function Screen.drawCircle 0
+push constant 0
+return
