@@ -1,5 +1,5 @@
 function String.new 0
-push constant 2
+push constant 3
 call Memory.alloc 1
 pop pointer 0
 push argument 0
@@ -16,6 +16,8 @@ call Array.new 1
 pop this 0
 push constant 0
 pop this 1
+push argument 0
+pop this 2
 push pointer 0
 return
 function String.dispose 0
@@ -57,6 +59,12 @@ function String.appendChar 0
 push argument 0
 pop pointer 0
 push this 1
+push this 2
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push this 1
 push this 0
 add
 push argument 1
@@ -68,33 +76,186 @@ push this 1
 push constant 1
 add
 pop this 1
+label IF_FALSE0
 push pointer 0
 return
 function String.eraseLastChar 0
 push argument 0
 pop pointer 0
 push this 1
-push this 0
-add
 push constant 0
-pop temp 0
-pop pointer 1
-push temp 0
-pop that 0
+gt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
 push this 1
 push constant 1
 sub
 pop this 1
+label IF_FALSE0
 push constant 0
 return
-function String.intValue 0
+function String.digitToChar 0
+push constant 48
+push argument 0
+add
+return
+function String.charToDigit 0
+push argument 0
+push constant 48
+sub
+return
+function String.strIsNegative 0
 push argument 0
 pop pointer 0
+push this 1
 push constant 0
+gt
+push constant 0
+push this 0
+add
+pop pointer 1
+push that 0
+push constant 45
+eq
+and
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push constant 0
+not
+return
+goto IF_END0
+label IF_FALSE0
+push constant 0
+return
+label IF_END0
+function String.makeStrNegative 0
+push argument 0
+pop pointer 0
+push pointer 0
+push constant 45
+call String.appendChar 2
+pop temp 0
+push constant 0
+return
+function String.intValue 3
+push argument 0
+pop pointer 0
+push pointer 0
+call String.strIsNegative 1
+pop local 2
+push local 2
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push constant 1
+pop local 1
+goto IF_END0
+label IF_FALSE0
+push constant 0
+pop local 1
+label IF_END0
+push constant 0
+pop local 0
+label WHILE_EXP0
+push local 1
+push this 1
+lt
+not
+if-goto WHILE_END0
+push local 0
+push constant 10
+call Math.multiply 2
+push local 1
+push this 0
+add
+pop pointer 1
+push that 0
+call String.charToDigit 1
+add
+pop local 0
+push local 1
+push constant 1
+add
+pop local 1
+goto WHILE_EXP0
+label WHILE_END0
+push local 2
+if-goto IF_TRUE1
+goto IF_FALSE1
+label IF_TRUE1
+push local 0
+neg
+pop local 0
+label IF_FALSE1
+push local 0
 return
 function String.setInt 0
 push argument 0
 pop pointer 0
+push constant 0
+pop this 1
+push argument 1
+push constant 0
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push argument 1
+neg
+pop argument 1
+push pointer 0
+call String.makeStrNegative 1
+pop temp 0
+label IF_FALSE0
+push pointer 0
+push argument 1
+call String.setIntHelper 2
+pop temp 0
+push constant 0
+return
+function String.setIntHelper 3
+push argument 0
+pop pointer 0
+push argument 1
+push constant 10
+call Math.divide 2
+pop local 2
+push argument 1
+push constant 10
+push local 2
+call Math.multiply 2
+sub
+pop local 0
+push local 0
+call String.digitToChar 1
+pop local 1
+push argument 1
+push constant 10
+lt
+if-goto IF_TRUE0
+goto IF_FALSE0
+label IF_TRUE0
+push pointer 0
+push local 1
+call String.appendChar 2
+pop temp 0
+goto IF_END0
+label IF_FALSE0
+push argument 1
+push constant 10
+call Math.divide 2
+pop argument 1
+push pointer 0
+push argument 1
+call String.setIntHelper 2
+pop temp 0
+push pointer 0
+push local 1
+call String.appendChar 2
+pop temp 0
+label IF_END0
 push constant 0
 return
 function String.newLine 0

@@ -13,6 +13,7 @@
 class String {
     field Array str;
     field int length;
+    field int maxLen;
 
     /** constructs a new empty string with a maximum length of maxLength
      *  and initial length of 0. */
@@ -24,6 +25,7 @@ class String {
 
         let str = Array.new(maxLength);
         let length = 0;
+        let maxLen = maxLength;
         return this;
     }
 
@@ -51,46 +53,113 @@ class String {
 
     /** Appends c to this string's end and returns this string. */
     method String appendChar(char c) {
-        let str[length] = c;
-        let length = length + 1;
+        if (length < maxLen) {
+            let str[length] = c;
+            let length = length + 1;
+        }
         return this;
     }
 
     /** Erases the last character from this string. */
     method void eraseLastChar() {
-        let str[length] = 0;
-        let length = length - 1;
+        if (length > 0) {
+            let length = length - 1;
+        }
+        return;
+    }
+
+    /** Convert digit to char */
+    function int digitToChar(int digit) {
+        return 48 + digit; // 48 is character code for zero
+    }
+
+    /** Convert char to digit */
+    function int charToDigit(char character) {
+        return character - 48; // 48 is character code for zero
+    }
+
+    /** Check if string is negative */
+    method boolean strIsNegative() {
+        if ((length > 0) & (str[0] = 45)) { // 45 is char code for '-'
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    /** Append "-" char to represent as negative */
+    method void makeStrNegative() {
+        do appendChar(45); // 45 is char code for '-'
         return;
     }
 
     /** Returns the integer value of this string, 
      *  until a non-digit character is detected. */
     method int intValue() {
-        return 0;
+        var int val, idx;
+        var boolean isNeg;
+        
+        let isNeg = strIsNegative();
+        if (isNeg) {
+            let idx = 1;
+        } else {
+            let idx = 0;
+        }
+
+        let val = 0;
+        while (idx < length) {
+            let val = (val * 10) + String.charToDigit(str[idx]);
+            let idx = idx + 1;
+        }
+
+        if (isNeg) {
+            let val = -val;
+        }
+        return val;
     }
 
     /** Sets this string to hold a representation of the given value. */
     method void setInt(int val) {
-        var boolean isNeg;
+        // clear string
+        let length = 0;
+        
         if (val < 0) {
-            let isNeg = true;
             let val = -val;
-        } else {
-            let isNeg = false;
+            do makeStrNegative();
         }
 
-        // here
+        do setIntHelper(val);
+        return;
+    }
+
+    method void setIntHelper(int val) {
+        var int lastDigit, lastChar, quotient;
+
+        // lastDigit = val % 10
+        let quotient = val / 10;
+        let lastDigit = val - (10 * quotient);
+
+        // lastChar = char representing lastDigit
+        let lastChar = String.digitToChar(lastDigit);
+
+        if (val < 10) {
+            do appendChar(lastChar);
+        } else {
+            let val = val / 10;
+            do setIntHelper(val);
+            do appendChar(lastChar);
+        }
         return;
     }
 
     /** Returns the new line character. */
     function char newLine() {
-        return 128;
+        return 128; // may be different with my compiler
     }
 
     /** Returns the backspace character. */
     function char backSpace() {
-        return 129;
+        return 129; // may be different with my compiler
     }
 
     /** Returns the double quote (") character. */
