@@ -17,6 +17,11 @@ class String {
     /** constructs a new empty string with a maximum length of maxLength
      *  and initial length of 0. */
     constructor String new(int maxLength) {
+        // can remove this when not testing in isolation
+        if (maxLength < 1) {
+            let maxLength = 1;
+        }
+
         let str = Array.new(maxLength);
         let length = 0;
         return this;
@@ -24,7 +29,7 @@ class String {
 
     /** Disposes this string. */
     method void dispose() {
-        do Memory.dealloc(this);
+        do Memory.deAlloc(this);
         return;
     }
 
@@ -66,21 +71,30 @@ class String {
 
     /** Sets this string to hold a representation of the given value. */
     method void setInt(int val) {
+        var boolean isNeg;
+        if (val < 0) {
+            let isNeg = true;
+            let val = -val;
+        } else {
+            let isNeg = false;
+        }
+
+        // here
         return;
     }
 
     /** Returns the new line character. */
     function char newLine() {
-        return "a";
+        return 128;
     }
 
     /** Returns the backspace character. */
     function char backSpace() {
-        return "a";
+        return 129;
     }
 
     /** Returns the double quote (") character. */
     function char doubleQuote() {
-        return "a";
+        return 34;
     }
 }
