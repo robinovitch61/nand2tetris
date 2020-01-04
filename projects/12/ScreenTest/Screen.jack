@@ -65,6 +65,127 @@ class Screen {
 
     /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
     function void drawLine(int x1, int y1, int x2, int y2) {
+        // horizontal line
+        if (y1 = y2) {
+            do Screen.drawHorizontalLine(x1, x2, y1);
+            return;
+        }
+
+        // vertical line
+        if (x1 = x2) {
+            do Screen.drawVerticalLine(y1, y2, x1);
+            return;
+        }
+
+        // diagonal line
+        do Screen.drawDiagonalLine(x1, y1, x2, y2);
+        return;
+    }
+
+    /** Draw horizontal line */
+    function void drawHorizontalLine(int x1, int x2, int y) {
+        var int currVal, endVal, addr;
+        if (x1 < x2) {
+            let currVal = x1;
+            let endVal = x2;
+        } else {
+            let currVal = x2;
+            let endVal = x1;
+        }
+
+        // first block
+        while (currVal & 15 > 0) {
+            do Screen.drawPixel(currVal, y);
+            let currVal = currVal + 1;
+        }
+
+        // middle blocks all full
+        while (currVal < (endVal - PX_WORD)) {
+            let addr = (NUM_WORDS_ACROSS * y) + (currVal / PX_WORD);
+            do Memory.poke(BASE + addr, -1);
+            let currVal = currVal + PX_WORD;
+        }
+
+        // last block
+        while (currVal < endVal) {
+            do Screen.drawPixel(currVal, y);
+            let currVal = currVal + 1;
+        }
+        return;
+    }
+
+    /** Draw vertical line */
+    function void drawVerticalLine(int y1, int y2, int x) {
+        var int currVal, endVal, vertBit, addr;
+        let vertBit = Math.twoToThe(x & 15);
+
+        if (y1 < y2) {
+            let currVal = y1;
+            let endVal = y2;
+        } else {
+            let currVal = y2;
+            let endVal = y1;
+        }
+
+        while (currVal < endVal) {
+            let addr = (NUM_WORDS_ACROSS * currVal) + (x / PX_WORD);
+            do Memory.poke(BASE + addr, vertBit);
+            let currVal = currVal + 1;
+        }
+        return;
+    }
+
+    /** Draw diagonal line */
+    function void drawDiagonalLine(int x1, int y1, int x2, int y2) {
+        var int totalXDist, totalYDist, xDist, yDist, diff;
+        var boolean xNeg, yNeg;
+        
+        let xDist = 0;
+        let yDist = 0;
+        let totalXDist = x2 - x1;
+        let totalYDist = y2 - y1;
+
+        if (totalXDist < 0) {
+            let xNeg = true;
+            let totalXDist = -totalXDist;
+        } else {
+            let xNeg = false;
+        }
+
+        if (totalYDist < 0) {
+            let yNeg = true;
+            let totalYDist = -totalYDist;
+        } else {
+            let yNeg = false;
+        }
+
+        let diff = 0;
+        while ((xDist < totalXDist) & (yDist < totalYDist)) {
+            // down and right
+            if ((~xNeg) & (~yNeg)) {
+                do Screen.drawPixel(x1 + xDist, y1 + yDist);
+            }
+            // up and right
+            if ((~xNeg) & (yNeg)) {
+                do Screen.drawPixel(x1 + xDist, y1 - yDist);
+            }
+            // down and left
+            if ((xNeg) & (~yNeg)) {
+                do Screen.drawPixel(x1 - xDist, y1 + yDist);
+            }
+            // up and left
+            if ((xNeg) & (yNeg)) {
+                do Screen.drawPixel(x1 - xDist, y1 - yDist);
+            }
+
+            if (diff < 0) {
+                let xDist = xDist + 1;
+                let diff = diff + totalYDist;
+            } else {
+                let yDist = yDist + 1;
+                let diff = diff - totalXDist;
+            }
+        }
         return;
     }
 
