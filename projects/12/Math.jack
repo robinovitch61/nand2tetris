@@ -7,6 +7,9 @@
  * A library of commonly used mathematical functions.
  * Note: Jack compilers implement multiplication and division using OS method calls.
  */
+
+// POSSIBLE WORK REQUIRED FOR OPTIMIZATION
+
 class Math {
 
     static Array twoToThe;

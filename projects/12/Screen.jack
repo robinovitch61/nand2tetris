@@ -9,6 +9,9 @@
  * of 256 pixels each (indexed 0..255, left to right). The top left pixel on 
  * the screen is indexed (0,0).
  */
+
+// POSSIBLE WORK REQUIRED FOR OPTIMIZATION
+
 class Screen {
     static boolean COLOR;
     static int BASE, PX_ACROSS, PX_DOWN, PX_WORD, NUM_WORDS_ACROSS, NUM_WORDS;

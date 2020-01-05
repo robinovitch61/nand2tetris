@@ -14,6 +14,9 @@
  * character position on the screen is indexed (0,0). A cursor, implemented
  * as a small filled square, indicates where the next character will be displayed.
  */
+
+// POSSIBLE WORK REQUIRED FOR OPTIMIZATION
+
 class Output {
 
     // Character map for displaying characters

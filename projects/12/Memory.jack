@@ -8,6 +8,9 @@
  * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
  * consists of 32,768 words, each holding a 16-bit binary number.
  */ 
+
+// POSSIBLE WORK REQUIRED FOR OPTIMIZATION
+
 class Memory {
     static Array RAM, HEAP;
     static int FREE_LIST;

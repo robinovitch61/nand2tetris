@@ -13,9 +13,9 @@ class Sys {
     function void init() {
         let SYSTEM_WAIT = 150;
 
+        do Memory.init();
         do Keyboard.init();
         do Math.init();
-        do Memory.init();
         do Output.init();
         do Screen.init();
 
