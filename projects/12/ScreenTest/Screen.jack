@@ -25,6 +25,21 @@ class Screen {
         return;
     }
 
+    /** Get screen base addr */
+    function int getBaseAddr() {
+        return BASE;
+    }
+
+    /** Get num memory words per row */
+    function int getWordsPerRow() {
+        return NUM_WORDS_ACROSS;
+    }
+
+    /** Get memory addr of screen for pixel x and y */
+    function int getAddr(int x, int y) {
+        return (NUM_WORDS_ACROSS * y) + (x / PX_WORD);
+    }
+
     /** Erases the entire screen. */
     function void clearScreen() {
         var int currWord;
@@ -48,17 +63,17 @@ class Screen {
     function void drawPixel(int x, int y) {
         var int addr, prevVal, mask;
 
-        let addr = (NUM_WORDS_ACROSS * y) + (x / PX_WORD);
-        let prevVal = Memory.peek(BASE + addr);
+        let addr = Screen.getAddr(x, y);
+        let prevVal = BASE[addr];
 
         // optimization trick: n % 2^i = n & (2^i - 1), so n % 2^4 = n & 15
         // from https://stackoverflow.com/questions/3072665/bitwise-and-in-place-of-modulus-operator
         let mask = Math.twoToThe(x & 15);
 
         if (COLOR) {
-            do Memory.poke(BASE + addr, prevVal | mask);
+            let BASE[addr] = prevVal | mask;
         } else {
-            do Memory.poke(BASE + addr, prevVal & (~mask));
+            let BASE[addr] = prevVal & (~mask);
         }
         return;
     }
@@ -101,11 +116,11 @@ class Screen {
 
         // middle blocks all full
         while (currVal < (endVal - PX_WORD)) {
-            let addr = (NUM_WORDS_ACROSS * y) + (currVal / PX_WORD);
+            let addr = Screen.getAddr(currVal, y);
             if (COLOR) {
-                do Memory.poke(BASE + addr, -1);
+                let BASE[addr] = -1;
             } else {
-                do Memory.poke(BASE + addr, 0);
+                let BASE[addr] = 0;
             }
             let currVal = currVal + PX_WORD;
         }
@@ -120,7 +135,7 @@ class Screen {
 
     /** Draw vertical line */
     function void drawVerticalLine(int y1, int y2, int x) {
-        var int currVal, endVal, vertBit, addr;
+        var int currVal, endVal, vertBit;
         let vertBit = Math.twoToThe(x & 15);
 
         if (y1 < y2) {
@@ -132,8 +147,7 @@ class Screen {
         }
 
         while (currVal < (endVal + 1)) {
-            let addr = (NUM_WORDS_ACROSS * currVal) + (x / PX_WORD);
-            do Memory.poke(BASE + addr, vertBit);
+            let BASE[Screen.getAddr(x, currVal)] = vertBit;
             let currVal = currVal + 1;
         }
         return;
