@@ -94,7 +94,7 @@ class Screen {
         }
 
         // first block
-        while (currVal & 15 > 0) {
+        while ((currVal & 15 > 0) & (currVal < (endVal + 1))) {
             do Screen.drawPixel(currVal, y);
             let currVal = currVal + 1;
         }
@@ -102,12 +102,16 @@ class Screen {
         // middle blocks all full
         while (currVal < (endVal - PX_WORD)) {
             let addr = (NUM_WORDS_ACROSS * y) + (currVal / PX_WORD);
-            do Memory.poke(BASE + addr, -1);
+            if (COLOR) {
+                do Memory.poke(BASE + addr, -1);
+            } else {
+                do Memory.poke(BASE + addr, 0);
+            }
             let currVal = currVal + PX_WORD;
         }
 
         // last block
-        while (currVal < endVal) {
+        while (currVal < (endVal + 1)) {
             do Screen.drawPixel(currVal, y);
             let currVal = currVal + 1;
         }
@@ -127,7 +131,7 @@ class Screen {
             let endVal = y1;
         }
 
-        while (currVal < endVal) {
+        while (currVal < (endVal + 1)) {
             let addr = (NUM_WORDS_ACROSS * currVal) + (x / PX_WORD);
             do Memory.poke(BASE + addr, vertBit);
             let currVal = currVal + 1;
@@ -192,11 +196,32 @@ class Screen {
     /** Draws a filled rectangle whose top left corner is (x1, y1)
      * and bottom right corner is (x2,y2), using the current color. */
     function void drawRectangle(int x1, int y1, int x2, int y2) {
+        
+        if (y2 - y1 < 0) { return; }
+        if (x2 - x1 < 0) { return; }
+
+        while (y1 < (y2 + 1)) {
+            do Screen.drawHorizontalLine(x1, x2, y1);
+            let y1 = y1 + 1;
+        }
         return;
     }
 
     /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
     function void drawCircle(int x, int y, int r) {
+        var int dy, rSquared, horizontal;
+
+        // handle overflow
+        if (r > 181) { return; }
+        if (r < 0) { return; }
+
+        let rSquared = Math.multiply(r, r);
+        let dy = -r;
+        while (dy < (r + 1)) {
+            let horizontal = Math.sqrt(rSquared - Math.multiply(dy, dy));
+            do Screen.drawHorizontalLine(x - horizontal, x + horizontal, y + dy);
+            let dy = dy + 1;
+        }
         return;
     }
 }
