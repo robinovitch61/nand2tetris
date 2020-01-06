@@ -9,19 +9,15 @@
  * consists of 32,768 words, each holding a 16-bit binary number.
  */ 
 
-// POSSIBLE WORK REQUIRED FOR OPTIMIZATION
-
 class Memory {
-    static Array RAM, HEAP;
-    static int FREE_LIST;
+    static Array RAM, FREE_LIST;
 
     /** Initializes the class. */
     function void init() {
         let RAM = 0;
-        let HEAP = 2048;
-        let HEAP[0] = 0; // next
-        let HEAP[1] = 14335; // length
-        let FREE_LIST = HEAP;
+        let FREE_LIST = 2048;
+        let FREE_LIST[0] = null; // next
+        let FREE_LIST[1] = 14334; // length ((16383 - 2048 + 1) - 2)
         return;
     }
 
@@ -39,41 +35,44 @@ class Memory {
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
-        var int blockBase, block, offset;
+        var int reqSize, oldBlock, newBlock;
 
-        if (size < 1) {
-            let size = 1; // need at least one for blockBase pointer
+        if (size < 0) {
+            do Sys.error(1);
         }
 
-        let blockBase = FREE_LIST;
-        while (blockBase[1] < (size + 2)) { // while block too small
-            if (blockBase[0] = 0) {
+        let reqSize = size + 2;
+        let oldBlock = FREE_LIST;
+        while (oldBlock[1] < reqSize) { // while block too small
+            if (oldBlock[0] = null) {
                 do Sys.error(404); // no next block
             } else {
-                let blockBase = blockBase[0];
+                let oldBlock = oldBlock[0]; // try next block
             }
         }
 
         // found block! (first available)
-        let offset = blockBase[1] + 2 - size;
-        let block = blockBase + offset;
-        let blockBase[offset - 1] = size;
-        let blockBase[offset - 2] = 0;
-        let blockBase[1] = blockBase[1] - size - 2;
-        return block;
+        // oldBlock now points to the start address of a memory block with enough space
+        // where oldBlock[0] = pointer to next segment (could be null)
+        // and oldBlock[1] = size of current segment
+        let oldBlock[1] = oldBlock[1] - reqSize; // adjust old block size
+        let newBlock = oldBlock + oldBlock[1] + 2;
+        let newBlock[0] = null;
+        let newBlock[1] = size;
+        return newBlock;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
-        var int blockBase;
+        var int oldBlock;
         
-        let blockBase = FREE_LIST;
-        while (~(blockBase[0] = 0)) {
-            let blockBase = blockBase[0];
+        let oldBlock = FREE_LIST;
+        while (~(oldBlock[0] = null)) {
+            let oldBlock = oldBlock[0];
         }
-        // blockBase now pointing at final block
-        let blockBase[0] = o - 2;
+        // oldBlock now pointing at final block
+        let oldBlock[0] = o - 2;
         return;
     }    
 }

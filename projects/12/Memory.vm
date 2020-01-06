@@ -14,13 +14,11 @@ pop that 0
 push constant 1
 push static 1
 add
-push constant 14335
+push constant 14334
 pop temp 0
 pop pointer 1
 push temp 0
 pop that 0
-push static 1
-pop static 2
 push constant 0
 return
 function Memory.peek 0
@@ -43,30 +41,33 @@ push constant 0
 return
 function Memory.alloc 3
 push argument 0
-push constant 1
+push constant 0
 lt
 if-goto IF_TRUE0
 goto IF_FALSE0
 label IF_TRUE0
 push constant 1
-pop argument 0
+call Sys.error 1
+pop temp 0
 label IF_FALSE0
-push static 2
-pop local 0
-label WHILE_EXP0
-push constant 1
-push local 0
-add
-pop pointer 1
-push that 0
 push argument 0
 push constant 2
 add
+pop local 0
+push static 1
+pop local 1
+label WHILE_EXP0
+push constant 1
+push local 1
+add
+pop pointer 1
+push that 0
+push local 0
 lt
 not
 if-goto WHILE_END0
 push constant 0
-push local 0
+push local 1
 add
 pop pointer 1
 push that 0
@@ -81,42 +82,40 @@ pop temp 0
 goto IF_END1
 label IF_FALSE1
 push constant 0
-push local 0
+push local 1
 add
 pop pointer 1
 push that 0
-pop local 0
+pop local 1
 label IF_END1
 goto WHILE_EXP0
 label WHILE_END0
 push constant 1
-push local 0
+push local 1
+add
+push constant 1
+push local 1
 add
 pop pointer 1
 push that 0
-push constant 2
-add
-push argument 0
-sub
-pop local 2
 push local 0
-push local 2
-add
-pop local 1
-push local 2
-push constant 1
 sub
-push local 0
-add
-push argument 0
 pop temp 0
 pop pointer 1
 push temp 0
 pop that 0
-push local 2
+push local 1
+push constant 1
+push local 1
+add
+pop pointer 1
+push that 0
+add
 push constant 2
-sub
-push local 0
+add
+pop local 2
+push constant 0
+push local 2
 add
 push constant 0
 pop temp 0
@@ -124,25 +123,17 @@ pop pointer 1
 push temp 0
 pop that 0
 push constant 1
-push local 0
+push local 2
 add
-push constant 1
-push local 0
-add
-pop pointer 1
-push that 0
 push argument 0
-sub
-push constant 2
-sub
 pop temp 0
 pop pointer 1
 push temp 0
 pop that 0
-push local 1
+push local 2
 return
 function Memory.deAlloc 1
-push static 2
+push static 1
 pop local 0
 label WHILE_EXP0
 push constant 0
