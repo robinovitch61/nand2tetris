@@ -1,4 +1,6 @@
 function Output.init 0
+call Output.initMap 0
+pop temp 0
 push constant 0
 pop static 0
 push constant 0
@@ -15,8 +17,6 @@ push constant 23
 pop static 5
 push constant 64
 pop static 6
-call Output.initMap 0
-pop temp 0
 push constant 0
 return
 function Output.clearAtCursor 0
